@@ -42,7 +42,7 @@ git pull
 | File | Purpose |
 |------|---------|
 | `backend/.env` | API keys, admin email/password, DB path |
-| `backend/edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json` | Firebase Admin SDK (disable users, admin API) |
+| `backend/edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json` | Firebase Admin SDK — in repo after [owner allows push](#firebase-admin-sdk-json-repo-owner) |
 | `backend/crops_recommendation.db` | Local SQLite (legacy / backup) |
 | `backend/models/crop_model.joblib` | Trained ML model |
 | `lib/firebase_options.dart` | Flutter Firebase config |
@@ -263,6 +263,26 @@ cd AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System
 git pull
 .\scripts\setup-project.ps1
 ```
+
+---
+
+## Firebase Admin SDK JSON (repo owner)
+
+GitHub **blocks** pushing the service account file automatically. The repo owner must allow it once:
+
+1. Open (while logged in as repo owner):  
+   https://github.com/cracker38/AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System/security/secret-scanning/unblock-secret/3EGRnUhX7aFoz2SimZERU93gLar  
+2. Click **Allow secret** (private collaborator repo).
+3. On the machine that has the file, run:
+
+```powershell
+cd backend
+git add edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json
+git commit -m "chore: add Firebase Admin SDK for collaborators"
+git push origin main
+```
+
+Until then, copy `backend/edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json` from a teammate or Firebase Console → Service accounts → Generate new private key, and keep the path in `backend/.env`.
 
 ---
 
