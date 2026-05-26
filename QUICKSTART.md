@@ -1,12 +1,51 @@
 # Quick start (Windows)
 
-## Done automatically
+Full guide: [README.md](README.md)
 
-- Python venv + packages in `backend/.venv`
-- ML model trained (`backend/models/crop_model.joblib`)
-- Flutter dependencies + analyzer clean
+## 1. Developer Mode (if Flutter asks for symlinks)
 
-## Firestore collections (Firebase Console)
+```powershell
+start ms-settings:developers
+```
+
+Turn **Developer Mode** on → restart PC → new terminal.
+
+## 2. Setup
+
+```powershell
+git clone https://github.com/cracker38/AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System.git
+cd AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System
+.\scripts\setup-project.ps1
+
+cd backend
+copy .env.example .env
+# Add firebase-service-account.json, edit .env
+.\.venv\Scripts\python.exe scripts\seed_admin.py
+```
+
+Enable [Email/Password auth](https://console.firebase.google.com/project/edissaproject/authentication/providers).
+
+## 3. Run
+
+**API**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-api.ps1
+```
+
+**App**
+
+```powershell
+flutter run -d chrome
+```
+
+| Device | API URL |
+|--------|---------|
+| Web | `http://localhost:8000` |
+| Android emulator | `http://10.0.2.2:8000` |
+| Phone on LAN | `http://<PC-IP>:8000` |
+
+## Firestore collections
 
 | Collection | Document ID | Contents |
 |------------|-------------|----------|
@@ -14,45 +53,3 @@
 | `predictions` | auto-id | crop results per farmer |
 | `training_datasets` | auto-id | CSV metadata (admin) |
 | `system` | `model` | ML metadata after training |
-
-## One manual step (Firebase)
-
-Enable **Email/Password** authentication:
-
-https://console.firebase.google.com/project/edissaproject/authentication/providers
-
-Then seed the admin:
-
-```powershell
-cd c:\xampp\htdocs\crops_recommendation\backend
-..\.venv\Scripts\python.exe scripts\seed_admin.py
-```
-
-Admin login: `it.elias38@gmail.com` / password from `backend/.env`
-
-## Run
-
-**Terminal 1 — API**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File c:\xampp\htdocs\crops_recommendation\scripts\start-api.ps1
-```
-
-**Terminal 2 — App**
-
-```powershell
-cd c:\xampp\htdocs\crops_recommendation
-flutter run
-```
-
-Set API URL on login screen:
-
-| Device | URL |
-|--------|-----|
-| Android emulator | `http://10.0.2.2:8000` |
-| Physical phone | `http://<your-PC-LAN-IP>:8000` |
-
-## Optional
-
-- Enable **Windows Developer Mode** (Settings → For developers) if Flutter warns about symlinks.
-- Add `backend/firebase-service-account.json` to enable disabling users from the admin panel.
