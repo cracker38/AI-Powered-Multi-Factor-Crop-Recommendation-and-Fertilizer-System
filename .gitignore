@@ -44,8 +44,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Backend secrets & data
-backend/.env
-backend/firebase-service-account.json
-backend/*.db
+# Backend local runtime (regenerate with setup-project.ps1)
+backend/.venv/
+backend/__pycache__/
+# Large uploaded training CSVs — optional; remove line to track datasets/
 backend/models/datasets/

@@ -1,31 +1,30 @@
-# Quick start (Windows)
+# Quick start (collaborators)
 
-Full guide: [README.md](README.md)
+Full guide: **[README.md](README.md)**
 
-## 1. Developer Mode (if Flutter asks for symlinks)
+## 1. Developer Mode (Windows)
 
 ```powershell
 start ms-settings:developers
 ```
 
-Turn **Developer Mode** on → restart PC → new terminal.
+Turn on → restart PC.
 
-## 2. Setup
+## 2. Clone & setup
 
 ```powershell
 git clone https://github.com/cracker38/AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System.git
 cd AI-Powered-Multi-Factor-Crop-Recommendation-and-Fertilizer-System
 .\scripts\setup-project.ps1
-
 cd backend
-copy .env.example .env
-# Add firebase-service-account.json, edit .env
 .\.venv\Scripts\python.exe scripts\seed_admin.py
 ```
 
-Enable [Email/Password auth](https://console.firebase.google.com/project/edissaproject/authentication/providers).
+`backend/.env` and Firebase Admin JSON are **already in the repo**.
 
-## 3. Run
+Admin login: see `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `backend/.env`.
+
+## 3. Run (two terminals)
 
 **API**
 
@@ -39,17 +38,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-api.ps1
 flutter run -d chrome
 ```
 
-| Device | API URL |
-|--------|---------|
+| Device | API |
+|--------|-----|
 | Web | `http://localhost:8000` |
 | Android emulator | `http://10.0.2.2:8000` |
-| Phone on LAN | `http://<PC-IP>:8000` |
-
-## Firestore collections
-
-| Collection | Document ID | Contents |
-|------------|-------------|----------|
-| `users` | Firebase `uid` | email, role, display_name, disabled |
-| `predictions` | auto-id | crop results per farmer |
-| `training_datasets` | auto-id | CSV metadata (admin) |
-| `system` | `model` | ML metadata after training |

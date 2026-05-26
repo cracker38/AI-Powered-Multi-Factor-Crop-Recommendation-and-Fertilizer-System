@@ -1,7 +1,3 @@
-.env
-firebase-service-account.json
-*firebase-adminsdk*.json
-*.db
-__pycache__/
 .venv/
+__pycache__/
 models/datasets/
