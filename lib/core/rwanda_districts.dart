@@ -1,0 +1,28 @@
+abstract final class RwandaDistricts {
+  static const list = [
+    'Bugesera',
+    'Burera',
+    'Gakenke',
+    'Gasabo',
+    'Gatsibo',
+    'Kayonza',
+    'Kicukiro',
+    'Kirehe',
+    'Muhanga',
+    'Musanze',
+    'Ngoma',
+    'Ngororero',
+    'Nyabihu',
+    'Nyagatare',
+    'Nyamagabe',
+    'Nyanza',
+    'Nyarugenge',
+    'Rubavu',
+    'Ruhango',
+    'Rulindo',
+    'Rusizi',
+    'Rutsiro',
+    'Rwamagana',
+    'Other',
+  ];
+}

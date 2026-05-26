@@ -1,0 +1,68 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc().data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid)
+        && request.resource.data.role == 'farmer'
+        && request.resource.data.email != 'it.elias38@gmail.com';
+      allow update: if isAdmin() || (isOwner(uid)
+        && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin() && resource.data.role != 'admin';
+    }
+
+    match /predictions/{pid} {
+      allow read: if isSignedIn() && (resource.data.user_uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.user_uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /outcome_feedback/{fid} {
+      allow read: if isSignedIn() && (resource.data.user_uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.user_uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /training_datasets/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /activity_logs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /notifications/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /farmer_tips/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /system/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

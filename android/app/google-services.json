@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "589495549005",
+    "project_id": "edissaproject",
+    "storage_bucket": "edissaproject.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:589495549005:android:a720fb125c573f454ff004",
+        "android_client_info": {
+          "package_name": "com.example.crops_recommendation"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhqYyWDFv1jeG5NDRDURo9IZV44JQFx9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
