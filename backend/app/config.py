@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     firebase_credentials_path: str = "./firebase-service-account.json"
     firebase_project_id: str = "edissaproject"
     firebase_web_api_key: str = "AIzaSyAhqYyWDFv1jeG5NDRDURo9IZV44JQFx9s"
-    admin_email: str = "it.elias38@gmail.com"
+    admin_email: str = "uwayiedissa@gmail.com"
     admin_password: str = ""
     database_url: str = "sqlite:///./crops_recommendation.db"
 

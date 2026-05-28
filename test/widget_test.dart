@@ -6,6 +6,6 @@ void main() {
   test('admin email is blocked from farmer registration check', () {
     expect(AuthService.isAdminEmail(kAdminEmail), isTrue);
     expect(AuthService.isAdminEmail('farmer@example.com'), isFalse);
-    expect(AuthService.isAdminEmail('IT.ELIAS38@GMAIL.COM'), isTrue);
+    expect(AuthService.isAdminEmail('UWAYIEDISSA@GMAIL.COM'), isTrue);
   });
 }

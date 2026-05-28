@@ -23,7 +23,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(uid)
         && request.resource.data.role == 'farmer'
-        && request.resource.data.email != 'it.elias38@gmail.com';
+        && request.resource.data.email != 'uwayiedissa@gmail.com';
       allow update: if isAdmin() || (isOwner(uid)
         && request.resource.data.role == resource.data.role);
       allow delete: if isAdmin() && resource.data.role != 'admin';

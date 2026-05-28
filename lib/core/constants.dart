@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'brand.dart';
 
 /// Reserved admin email — registration must reject this address.
-const String kAdminEmail = 'it.elias38@gmail.com';
+const String kAdminEmail = 'uwayiedissa@gmail.com';
 
 const String kAppTitle = Brand.productName;
 const String kAppTagline = Brand.tagline;

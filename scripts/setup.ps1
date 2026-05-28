@@ -33,4 +33,4 @@ flutter analyze 2>&1 | Out-Host
 Write-Host "`nSetup complete." -ForegroundColor Green
 Write-Host "Start API:  powershell -File scripts\start-api.ps1"
 Write-Host "Run app:    flutter run"
-Write-Host "Admin:      it.elias38@gmail.com  (password in backend\.env)"
+Write-Host "Admin:      uwayiedissa@gmail.com  (password in backend\.env)"
