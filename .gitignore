@@ -47,5 +47,7 @@ app.*.map.json
 # Backend local runtime (regenerate with setup-project.ps1)
 backend/.venv/
 backend/__pycache__/
+backend/.env
+backend/*-firebase-adminsdk-*.json
 # Large uploaded training CSVs — optional; remove line to track datasets/
 backend/models/datasets/

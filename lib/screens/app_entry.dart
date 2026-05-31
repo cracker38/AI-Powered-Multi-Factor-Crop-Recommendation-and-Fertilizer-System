@@ -8,6 +8,7 @@ import 'farmer/farmer_shell.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/session_bootstrap.dart';
 import 'splash/splash_flow.dart';
 
 /// Splash → auth gate → farmer or admin home.
@@ -66,7 +67,7 @@ class _AppEntryState extends State<AppEntry> {
     try {
       final base = await _auth.readApiBase();
       final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
-      final profile = await api.syncProfile();
+      final profile = await SessionBootstrap.loadProfile(api);
       await FirestoreService().syncCurrentAuthUser(profile);
       if (!mounted) return;
       setState(() {
@@ -90,7 +91,7 @@ class _AppEntryState extends State<AppEntry> {
         _profile = null;
         _api = null;
         _loading = false;
-        _bootstrapError = 'Could not connect to the server. Ensure the API is running.';
+        _bootstrapError = 'Could not connect to the server. Start the API on port 8000.';
       });
     }
   }

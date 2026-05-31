@@ -9,9 +9,10 @@ class FarmInput {
     required this.soilPh,
     required this.rainfallMm,
     this.soilType = 'loam',
-    this.season = 'season_a',
+    this.season = '',
     this.district,
     this.persist = true,
+    this.seasonAuto = true,
   });
 
   final double nitrogen;
@@ -23,9 +24,11 @@ class FarmInput {
   final double soilPh;
   final double rainfallMm;
   final String soilType;
+  /// Empty = API detects season from current date.
   final String season;
   final String? district;
   final bool persist;
+  final bool seasonAuto;
 
   Map<String, dynamic> toJson() => {
         'nitrogen': nitrogen,
@@ -37,7 +40,7 @@ class FarmInput {
         'soil_ph': soilPh,
         'rainfall_mm': rainfallMm,
         'soil_type': soilType,
-        'season': season,
+        if (!seasonAuto && season.isNotEmpty) 'season': season,
         if (district != null && district!.isNotEmpty) 'district': district,
         'persist': persist,
       };

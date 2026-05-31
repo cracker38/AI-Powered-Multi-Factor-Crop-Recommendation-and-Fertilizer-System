@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import require_farmer
+from app.farm_improvement import build_improvement_actions
 from app.fertilizer_service import recommend_fertilizers, soil_health_assessment
 from app.firestore_db import (
     UserRecord,
@@ -12,6 +13,7 @@ from app.firestore_db import (
     list_predictions_for_user,
 )
 from app.ml_service import predict_ranked
+from app.rwanda_season import current_rwanda_season, season_label
 from app.schemas import (
     CropPredictionResponse,
     CropRankItem,
@@ -62,9 +64,26 @@ def _build_evaluation(
         humidity_pct=payload.humidity_pct,
     )
     fertilizers = [FertilizerRecommendationItem(**f) for f in fert_raw]
+    confidence = round(ranked[0][1], 6)
+    improvements = build_improvement_actions(
+        confidence,
+        top_crop,
+        nitrogen=payload.nitrogen,
+        phosphorus=payload.phosphorus,
+        potassium=payload.potassium,
+        soil_moisture=payload.soil_moisture,
+        temperature_c=payload.temperature_c,
+        humidity_pct=payload.humidity_pct,
+        soil_ph=payload.soil_ph,
+        rainfall_mm=payload.rainfall_mm,
+        soil_type=payload.soil_type,
+        season=payload.season or current_rwanda_season(),
+        soil_health_score=health_score,
+    )
+    season_id = payload.season or current_rwanda_season()
     return CropPredictionResponse(
         top_crop=top_crop,
-        top_confidence=round(ranked[0][1], 6),
+        top_confidence=confidence,
         explanation=explanation,
         full_ranking=[CropRankItem(crop=n, confidence=round(s, 6)) for n, s in ranked],
         model_version=str(ml_info.get("model_version", "unknown")),
@@ -74,6 +93,9 @@ def _build_evaluation(
         nutrient_analysis=NutrientAnalysis(**analysis),
         weather_insight=_parse_weather(weather_raw),
         precision_notes=notes,
+        season_used=season_id,
+        season_label=season_label(season_id),
+        improvement_actions=improvements,
     )
 
 
@@ -82,6 +104,10 @@ def evaluate(
     payload: FarmConditionsRequest,
     user: UserRecord = Depends(require_farmer),
 ):
+    district = payload.district or getattr(user, "district", None)
+    season = current_rwanda_season()
+    payload = payload.model_copy(update={"district": district, "season": season})
+
     try:
         ranked, explanation, ml_info = predict_ranked(
             nitrogen=payload.nitrogen,
@@ -92,13 +118,12 @@ def evaluate(
             humidity_pct=payload.humidity_pct,
             soil_ph=payload.soil_ph,
             rainfall_mm=payload.rainfall_mm,
+            soil_type=payload.soil_type,
+            season=season,
+            district=district,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
-
-    district = payload.district or getattr(user, "district", None)
-    if district and not payload.district:
-        payload = payload.model_copy(update={"district": district})
 
     result = _build_evaluation(payload, ranked, explanation, ml_info)
     prediction_id = None
@@ -129,6 +154,8 @@ def evaluate(
                 "nutrient_analysis": result.nutrient_analysis.model_dump() if result.nutrient_analysis else None,
                 "weather_insight": result.weather_insight.model_dump() if result.weather_insight else None,
                 "precision_notes": result.precision_notes,
+                "season_used": result.season_used,
+                "improvement_actions": result.improvement_actions,
             },
         )
 
@@ -222,4 +249,6 @@ def history_detail(prediction_id: str, user: UserRecord = Depends(require_farmer
         full_ranking=ranking,
         has_feedback=fb is not None,
         feedback_rating=int(fb.get("yield_rating")) if fb else None,
+        season_label=season_label(str(row.get("season", "season_a"))),
+        improvement_actions=list(row.get("improvement_actions") or []),
     )

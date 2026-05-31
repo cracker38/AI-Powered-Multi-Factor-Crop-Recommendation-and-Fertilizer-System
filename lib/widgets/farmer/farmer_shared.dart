@@ -201,14 +201,22 @@ Future<void> showFarmerEvaluationDetail(
               Text(detail.topCrop.toUpperCase(), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               Text(
-                '${(detail.topConfidence * 100).toStringAsFixed(1)}% confidence',
+                '${(detail.topConfidence * 100).toStringAsFixed(1)}% suitability',
                 style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
               ),
+              if (detail.seasonLabel.isNotEmpty)
+                Text(detail.seasonLabel, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               Text(
                 _formatDate(detail.createdAt),
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 16),
+              if (detail.improvementActions.isNotEmpty)
+                ImprovementActionsSection(
+                  actions: detail.improvementActions,
+                  confidencePct: (detail.topConfidence * 100).toStringAsFixed(1),
+                ),
+              if (detail.improvementActions.isNotEmpty) const SizedBox(height: 12),
               if (detail.soilHealthScore > 0)
                 SoilHealthCard(score: detail.soilHealthScore, label: detail.soilHealthLabel),
               const SizedBox(height: 12),

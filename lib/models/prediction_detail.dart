@@ -29,6 +29,8 @@ class PredictionDetail {
     this.precisionNotes = const [],
     this.hasFeedback = false,
     this.feedbackRating,
+    this.seasonLabel = '',
+    this.improvementActions = const [],
   });
 
   final String id;
@@ -57,6 +59,10 @@ class PredictionDetail {
   final List<CropRank> fullRanking;
   final bool hasFeedback;
   final int? feedbackRating;
+  final String seasonLabel;
+  final List<String> improvementActions;
+
+  bool get isLowConfidence => topConfidence < 0.5;
 
   factory PredictionDetail.fromJson(Map<String, dynamic> json) {
     final ranking = (json['full_ranking'] as List<dynamic>? ?? [])
@@ -95,6 +101,9 @@ class PredictionDetail {
       fullRanking: ranking,
       hasFeedback: json['has_feedback'] as bool? ?? false,
       feedbackRating: json['feedback_rating'] as int?,
+      seasonLabel: json['season_label'] as String? ?? '',
+      improvementActions:
+          (json['improvement_actions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
 }

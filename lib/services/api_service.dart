@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -16,10 +17,11 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  ApiService({required this.baseUrl, required this.getToken});
+  ApiService({required this.baseUrl, required this.getToken, this.timeout = const Duration(seconds: 15)});
 
   final String baseUrl;
   final Future<String?> Function() getToken;
+  final Duration timeout;
 
   Uri _uri(String path) => Uri.parse('${baseUrl.replaceAll(RegExp(r'/+$'), '')}$path');
 
@@ -50,7 +52,9 @@ class ApiService {
   }
 
   Future<UserProfile> syncProfile() async {
-    final res = await http.post(_uri('/api/v1/auth/sync'), headers: await _headers());
+    final res = await http
+        .post(_uri('/api/v1/auth/sync'), headers: await _headers())
+        .timeout(timeout);
     return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 

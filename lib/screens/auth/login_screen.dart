@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
+import '../../services/session_bootstrap.dart';
 import '../../widgets/auth/auth_form_card.dart';
 import '../../widgets/auth/auth_gradient_background.dart';
 import '../../widgets/auth/auth_text_field.dart';
@@ -53,7 +55,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await _auth.signIn(_email.text, _password.text);
       final base = await _auth.readApiBase();
       final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
-      await api.syncProfile();
+      final profile = await SessionBootstrap.loadProfile(api);
+      await FirestoreService().syncCurrentAuthUser(profile);
       widget.onAuthenticated();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = authErrorMessage(e));
@@ -61,13 +64,22 @@ class _LoginScreenState extends State<LoginScreen> {
       if (e.statusCode == 404) {
         setState(() => _error = 'No farmer profile found. Please register first.');
       } else if (e.statusCode == 403 && e.message.contains('provisioned')) {
-        setState(() => _error = 'Admin account not provisioned. Contact your administrator.');
+        setState(() => _error = 'Admin not in Firestore. Run seed_admin.py or add users/{uid} in Firebase Console.');
+      } else if (e.statusCode == 503 || e.message.toLowerCase().contains('firestore')) {
+        setState(() => _error = e.message);
       } else {
         setState(() => _error = e.message);
       }
       await _auth.signOut();
     } catch (e) {
-      setState(() => _error = 'Could not reach the server. Start the API and try again.');
+      final detail = e.toString();
+      final unreachable = detail.contains('Connection refused') ||
+          detail.contains('Failed host lookup') ||
+          detail.contains('Failed to fetch') ||
+          detail.contains('SocketException');
+      setState(() => _error = unreachable
+          ? 'Could not reach the API. Run scripts/start-api.ps1 (port 8000), then press R to restart the app.'
+          : 'Sign-in failed: $detail');
       await _auth.signOut();
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -78,28 +90,23 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: AuthGradientBackground(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Column(
-                    children: [
-                      const AuthHeroHeader(),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 440),
-                              child: AuthFormCard(
-                                child: Form(
-                                  key: _formKey,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            children: [
+              const AuthHeroHeader(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: AuthFormCard(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                                       const Text(
                                         'Welcome back',
                                         style: TextStyle(
@@ -207,20 +214,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            );
-          },
+            ],
+          ),
         ),
       ),
     );

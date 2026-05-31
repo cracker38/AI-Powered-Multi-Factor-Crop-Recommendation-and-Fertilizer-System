@@ -25,6 +25,9 @@ class CropPrediction {
     this.nutrientAnalysis,
     this.weatherInsight,
     this.precisionNotes = const [],
+    this.seasonUsed = '',
+    this.seasonLabel = '',
+    this.improvementActions = const [],
   });
 
   final String topCrop;
@@ -39,6 +42,11 @@ class CropPrediction {
   final NutrientAnalysis? nutrientAnalysis;
   final WeatherInsight? weatherInsight;
   final List<String> precisionNotes;
+  final String seasonUsed;
+  final String seasonLabel;
+  final List<String> improvementActions;
+
+  bool get isLowConfidence => topConfidence < 0.5;
 
   factory CropPrediction.fromJson(Map<String, dynamic> json) {
     final ranking = (json['full_ranking'] as List<dynamic>)
@@ -63,6 +71,10 @@ class CropPrediction {
       nutrientAnalysis: na != null ? NutrientAnalysis.fromJson(na as Map<String, dynamic>) : null,
       weatherInsight: wi != null ? WeatherInsight.fromJson(wi as Map<String, dynamic>) : null,
       precisionNotes: (json['precision_notes'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      seasonUsed: json['season_used'] as String? ?? '',
+      seasonLabel: json['season_label'] as String? ?? '',
+      improvementActions:
+          (json['improvement_actions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
 }

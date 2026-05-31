@@ -42,7 +42,7 @@ class FarmConditionsRequest(BaseModel):
     soil_ph: float = Field(ge=0, le=14)
     rainfall_mm: float = Field(ge=0, le=2000)
     soil_type: str = Field(default="loam", max_length=40)
-    season: str = Field(default="season_a", max_length=40)
+    season: str | None = Field(default=None, max_length=40, description="Auto-detected from date if omitted")
     district: str | None = Field(default=None, max_length=80)
     persist: bool = True
 
@@ -141,6 +141,8 @@ class PredictionDetailItem(BaseModel):
     full_ranking: list[CropRankItem] = []
     has_feedback: bool = False
     feedback_rating: int | None = None
+    season_label: str = ""
+    improvement_actions: list[str] = []
 
 
 class CropPredictionResponse(BaseModel):
@@ -156,6 +158,9 @@ class CropPredictionResponse(BaseModel):
     nutrient_analysis: NutrientAnalysis | None = None
     weather_insight: WeatherInsight | None = None
     precision_notes: list[str] = []
+    season_used: str = "season_a"
+    season_label: str = ""
+    improvement_actions: list[str] = []
 
 
 class PredictionHistoryItem(BaseModel):

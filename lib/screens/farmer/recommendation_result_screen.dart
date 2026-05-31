@@ -80,13 +80,49 @@ class RecommendationResultScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'ML confidence: $pctLabel%',
+                  'Suitability index: $pctLabel%',
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                 ),
+                if (prediction.seasonLabel.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    prediction.seasonLabel,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
+                  ),
+                ],
               ],
             ),
           ),
+          if (prediction.isLowConfidence) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, color: Color(0xFFE65100)),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Low suitability — follow the improvement plan below before relying on this crop choice.',
+                      style: TextStyle(fontWeight: FontWeight.w600, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
+          if (prediction.improvementActions.isNotEmpty)
+            ImprovementActionsSection(
+              actions: prediction.improvementActions,
+              confidencePct: pctLabel,
+            ),
+          if (prediction.improvementActions.isNotEmpty) const SizedBox(height: 12),
           if (prediction.soilHealthScore > 0)
             SoilHealthCard(score: prediction.soilHealthScore, label: prediction.soilHealthLabel),
           const SizedBox(height: 12),

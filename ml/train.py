@@ -8,9 +8,9 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -46,7 +46,22 @@ def build_pipelines(random_state: int = 42):
     return {
         "random_forest": Pipeline([
             ("prep", pre),
-            ("clf", RandomForestClassifier(n_estimators=200, random_state=random_state, class_weight="balanced")),
+            ("clf", RandomForestClassifier(
+                n_estimators=300,
+                max_depth=14,
+                min_samples_leaf=2,
+                random_state=random_state,
+                class_weight="balanced",
+            )),
+        ]),
+        "gradient_boosting": Pipeline([
+            ("prep", pre),
+            ("clf", GradientBoostingClassifier(
+                n_estimators=150,
+                max_depth=5,
+                learning_rate=0.08,
+                random_state=random_state,
+            )),
         ]),
         "decision_tree": Pipeline([
             ("prep", pre),
@@ -54,7 +69,7 @@ def build_pipelines(random_state: int = 42):
         ]),
         "knn": Pipeline([
             ("prep", pre),
-            ("clf", KNeighborsClassifier(n_neighbors=5, weights="distance")),
+            ("clf", KNeighborsClassifier(n_neighbors=7, weights="distance")),
         ]),
     }
 
@@ -73,22 +88,32 @@ def main():
     best_name, best_acc, best_pipe = None, -1.0, None
     results = {}
     for name, pipe in build_pipelines().items():
+        n_splits = min(3, min(y_train.value_counts()))
+        cv = cross_val_score(pipe, X_train, y_train, cv=max(2, n_splits), scoring="accuracy") if n_splits >= 2 else np.array([0.0])
         pipe.fit(X_train, y_train)
         metrics = evaluate(y_test, pipe.predict(X_test), sorted(y.unique().tolist()))
+        metrics["cv_accuracy_mean"] = float(cv.mean())
         results[name] = metrics
-        if metrics["accuracy"] > best_acc:
-            best_acc, best_name, best_pipe = metrics["accuracy"], name, pipe
+        score = metrics["accuracy"] * 0.6 + metrics["cv_accuracy_mean"] * 0.4
+        if score > best_acc:
+            best_acc, best_name, best_pipe = score, name, pipe
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(best_pipe, MODEL_PATH)
+    # Sync training CSV to active dataset
+    df.to_csv(ACTIVE_DATASET, index=False)
     meta = {
         "best_model": best_name,
         "feature_order": FEATURES,
         "data_source": str(DATA_CSV),
-        "all_metrics": {k: {m: v[m] for m in ("accuracy", "precision_weighted", "recall_weighted", "f1_weighted")} for k, v in results.items()},
+        "hybrid_agronomy": True,
+        "all_metrics": {
+            k: {m: v[m] for m in ("accuracy", "precision_weighted", "recall_weighted", "f1_weighted", "cv_accuracy_mean")}
+            for k, v in results.items()
+        },
     }
     META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    print(f"Saved {best_name} accuracy={best_acc:.4f} -> {MODEL_PATH}")
+    print(f"Saved {best_name} test_acc={results[best_name]['accuracy']:.4f} -> {MODEL_PATH}")
 
 
 if __name__ == "__main__":

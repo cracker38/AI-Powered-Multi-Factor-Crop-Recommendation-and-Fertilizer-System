@@ -30,14 +30,21 @@ def ensure_firebase() -> None:
 
 
 def verify_id_token(token: str) -> dict:
+    """Verify Firebase ID token via Google public keys (no service account call)."""
     ensure_firebase()
-    if _use_admin_sdk:
-        return auth.verify_id_token(token)
     return google_id_token.verify_firebase_token(
         token,
         google_requests.Request(),
         audience=settings.firebase_project_id,
     )
+
+
+def token_uid(decoded: dict) -> str:
+    """Firebase Admin returns ``uid``; google-auth JWT verify uses ``sub`` / ``user_id``."""
+    uid = decoded.get("uid") or decoded.get("sub") or decoded.get("user_id")
+    if not uid:
+        raise ValueError("Token payload missing user id")
+    return str(uid)
 
 
 def create_admin_user(email: str, password: str) -> str:

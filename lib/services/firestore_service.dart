@@ -42,6 +42,25 @@ class FirestoreService {
     await upsertUserProfile(profile);
   }
 
+  /// Read `users/{uid}` with the signed-in client's token (no Admin SDK).
+  Future<UserProfile?> fetchCurrentUserProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    final snap = await _users.doc(uid).get();
+    if (!snap.exists) return null;
+    final data = snap.data();
+    if (data == null) return null;
+    return UserProfile(
+      id: uid,
+      email: (data['email'] as String?) ?? FirebaseAuth.instance.currentUser?.email ?? '',
+      displayName: data['display_name'] as String?,
+      role: (data['role'] as String?) ?? 'farmer',
+      disabled: data['disabled'] as bool? ?? false,
+      phone: data['phone'] as String?,
+      district: data['district'] as String?,
+    );
+  }
+
   Future<void> savePrediction({
     required String userUid,
     required FarmInput input,

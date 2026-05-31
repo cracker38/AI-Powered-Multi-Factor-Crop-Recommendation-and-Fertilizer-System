@@ -11,6 +11,7 @@ const String kAppTagline = Brand.tagline;
 /// Default API base for login screen (platform-aware).
 String get kDefaultApiBase {
   // Use localhost on web so origin matches typical Flutter dev server host.
+  // Match Flutter web dev server host (http://localhost:<port>).
   if (kIsWeb) return 'http://localhost:8000';
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:

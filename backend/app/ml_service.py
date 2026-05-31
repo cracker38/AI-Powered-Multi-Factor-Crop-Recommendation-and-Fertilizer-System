@@ -7,6 +7,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from app.crop_suitability import SEASON_LABELS, hybrid_rank, suitability_score
+
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_PATH = MODEL_DIR / "crop_model.joblib"
 META_PATH = MODEL_DIR / "model_meta.json"
@@ -30,33 +32,49 @@ def load_pipeline():
     return joblib.load(MODEL_PATH)
 
 
-def build_explanation(row: dict, top: str, ranked: list[tuple[str, float]]) -> str:
+def build_explanation(
+    row: dict,
+    top: str,
+    ranked: list[tuple[str, float]],
+    *,
+    soil_type: str,
+    season: str,
+    district: str | None,
+    factor_notes: dict[str, list[str]],
+) -> str:
+    conf_pct = ranked[0][1] * 100
+    season_label = SEASON_LABELS.get(season, season.replace("_", " "))
     parts = [
-        f"Primary recommendation is {top} ({ranked[0][1] * 100:.1f}% confidence) "
-        "based on your soil and climate profile."
+        f"Primary recommendation: {top.title()} ({conf_pct:.1f}% suitability index) "
+        f"for {soil_type} soil during {season_label}"
+        + (f" in {district}." if district else "."),
+        "This ranking blends machine-learning patterns from historical crop–soil data "
+        "with Rwanda extension guidelines for nutrients, pH, rainfall, and season timing.",
     ]
+
+    top_notes = factor_notes.get(top, [])
+    if top_notes:
+        parts.append(top_notes[0])
+    if len(top_notes) > 1:
+        parts.append(top_notes[1])
+
     ph = row["ph"]
-    if ph < 6.0:
-        parts.append("Soil pH is acidic; liming may help broaden crop options.")
-    elif ph > 7.8:
-        parts.append("Soil pH is alkaline; choose tolerant varieties.")
-    else:
-        parts.append("Soil pH is in a moderate range for many crops.")
+    if ph < 5.8:
+        parts.append(
+            f"Soil pH ({ph:.1f}) is acidic — liming before planting improves P availability and root growth."
+        )
+    elif ph > 7.5:
+        parts.append(f"Soil pH ({ph:.1f}) is alkaline — consider sulfur or organic matter to unlock micronutrients.")
 
-    if row["N"] < 40:
-        parts.append("Nitrogen appears limited; consider legume rotation or staged N application.")
-    if row["P"] < 40:
-        parts.append("Phosphorus may limit early root development.")
-    if row["K"] < 40:
-        parts.append("Potassium is on the lower side for drought resilience.")
+    if row["N"] < 50:
+        parts.append("Nitrogen is below typical smallholder levels; plan split urea or legume rotation.")
+    if row["rainfall"] < 450 and season == "season_c":
+        parts.append("Dry-season conditions favour drought-tolerant crops (cassava, sorghum, sweet potato).")
 
-    if row["rainfall"] < 100:
-        parts.append("Rainfall is relatively low; prioritize drought-tolerant crops.")
-    elif row["rainfall"] > 250:
-        parts.append("High rainfall; plan drainage and disease management.")
+    alts = [c for c, _ in ranked[1:3] if c != top]
+    if alts:
+        parts.append(f"Strong alternatives: {', '.join(a.title() for a in alts)}.")
 
-    if row["soil_moisture"] < 35:
-        parts.append("Low soil moisture; confirm irrigation with field observation.")
     return " ".join(parts)
 
 
@@ -70,6 +88,9 @@ def predict_ranked(
     humidity_pct: float,
     soil_ph: float,
     rainfall_mm: float,
+    soil_type: str = "loam",
+    season: str = "season_a",
+    district: str | None = None,
     top_k: int = 8,
 ) -> tuple[list[tuple[str, float]], str, dict]:
     pipeline = load_pipeline()
@@ -97,12 +118,40 @@ def predict_ranked(
         proba = np.zeros(len(classes))
         proba[idx] = 1.0
 
-    order = np.argsort(proba)[::-1][:top_k]
-    ranked = [(str(classes[i]), float(proba[i])) for i in order]
+    order = np.argsort(proba)[::-1]
+    ml_ranked = [(str(classes[i]), float(proba[i])) for i in order]
+
+    ranked, factor_notes = hybrid_rank(
+        ml_ranked,
+        nitrogen=nitrogen,
+        phosphorus=phosphorus,
+        potassium=potassium,
+        soil_moisture=soil_moisture,
+        temperature_c=temperature_c,
+        humidity_pct=humidity_pct,
+        soil_ph=soil_ph,
+        rainfall_mm=rainfall_mm,
+        soil_type=soil_type or "loam",
+        season=season or "season_a",
+        top_k=top_k,
+    )
+
     meta = _load_meta()
     version = meta.get("best_model", "unknown")
-    explanation = build_explanation(row, ranked[0][0], ranked)
-    return ranked, explanation, {"model_version": version, "meta": meta}
+    explanation = build_explanation(
+        row,
+        ranked[0][0],
+        ranked,
+        soil_type=soil_type or "loam",
+        season=season or "season_a",
+        district=district,
+        factor_notes=factor_notes,
+    )
+    return ranked, explanation, {
+        "model_version": f"{version}+agronomy",
+        "meta": meta,
+        "factor_notes": factor_notes,
+    }
 
 
 def training_dataset_path() -> Path:

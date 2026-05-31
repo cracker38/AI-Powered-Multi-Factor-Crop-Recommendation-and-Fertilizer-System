@@ -1,14 +1,35 @@
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 from app.deps import get_current_user
-from app.firebase_app import verify_id_token
+from app.firebase_app import token_uid, verify_id_token
 from app.firestore_db import UserRecord, get_user, get_user_by_email, upsert_user
 from app.schemas import RegisterFarmerRequest, UpdateFarmerProfileRequest, UserProfile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer = HTTPBearer()
+
+_FIRESTORE_TIMEOUT_SEC = 12.0
+
+
+def _firestore_user(uid: str) -> UserRecord | None:
+    """Load user from Firestore with a timeout (invalid service account keys hang)."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(get_user, uid)
+        try:
+            return fut.result(timeout=_FIRESTORE_TIMEOUT_SEC)
+        except FuturesTimeout:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Firestore timed out. Regenerate the Firebase Admin SDK JSON in "
+                    "Firebase Console, update backend/.env, then run scripts/seed_admin.py."
+                ),
+            ) from None
 
 
 def _profile(user: UserRecord) -> UserProfile:
@@ -34,7 +55,7 @@ def register_farmer(
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from None
 
-    uid = decoded["uid"]
+    uid = token_uid(decoded)
     email = (decoded.get("email") or "").strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Email required in Firebase account")
@@ -110,10 +131,19 @@ def sync_after_login(creds: HTTPAuthorizationCredentials = Depends(bearer)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token") from None
 
-    uid = decoded["uid"]
-    user = get_user(uid)
+    uid = token_uid(decoded)
+    email = (decoded.get("email") or "").strip().lower()
+    user = _firestore_user(uid)
+    if user is None and email == settings.admin_email_normalized:
+        upsert_user(
+            uid,
+            email=email,
+            display_name="System Administrator",
+            role="admin",
+            disabled=False,
+        )
+        user = _firestore_user(uid)
     if user is None:
-        email = (decoded.get("email") or "").strip().lower()
         if email == settings.admin_email_normalized:
             raise HTTPException(
                 status_code=403,

@@ -9,12 +9,13 @@ app = FastAPI(
     version="1.2.0",
 )
 
-# Flutter web runs on http://localhost:<random_port> — regex allows any dev port.
+# Flutter web: http://localhost:<random_port> → API on :8000
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["*"],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=600,

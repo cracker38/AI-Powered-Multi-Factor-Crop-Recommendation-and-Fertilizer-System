@@ -1,9 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/agriculture_options.dart';
 import '../../core/app_colors.dart';
 import '../../core/farmer_theme.dart';
+import '../../core/rwanda_season.dart';
 import '../../models/farm_input.dart';
 import '../../models/user_profile.dart';
 import '../../services/api_service.dart';
@@ -41,7 +41,7 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
   final _rain = TextEditingController(text: '200');
   final _hum = TextEditingController(text: '80');
   String _soilType = 'loam';
-  String _season = 'season_a';
+  late final String _autoSeason = RwandaSeason.current();
   bool _busy = false;
 
   @override
@@ -77,7 +77,7 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
         soilPh: _parse(_ph.text, min: 0, max: 14)!,
         rainfallMm: _parse(_rain.text, min: 0, max: 2000)!,
         soilType: _soilType,
-        season: _season,
+        seasonAuto: true,
         district: widget.profile?.district,
       );
       final result = await widget.api.evaluate(input);
@@ -160,12 +160,48 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
                         onChanged: (v) => setState(() => _soilType = v ?? 'loam'),
                       ),
                       const SizedBox(height: 12),
-                      _dropdown(
-                        label: 'Growing season',
-                        value: _season,
-                        items: AgricultureOptions.seasons,
-                        icon: Icons.calendar_month_rounded,
-                        onChanged: (v) => setState(() => _season = v ?? 'season_a'),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.calendar_month_rounded, color: AppColors.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Growing season (auto)',
+                                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    RwandaSeason.label(_autoSeason),
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    RwandaSeason.shortAdvice(_autoSeason),
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       if (widget.profile?.district != null && widget.profile!.district!.isNotEmpty) ...[
                         const SizedBox(height: 12),

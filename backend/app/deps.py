@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.firebase_app import verify_id_token
+from app.firebase_app import token_uid, verify_id_token
 from app.firestore_db import UserRecord, get_user
 
 bearer = HTTPBearer(auto_error=False)
@@ -17,9 +17,10 @@ def get_current_user(
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from None
 
-    uid = decoded.get("uid")
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+    try:
+        uid = token_uid(decoded)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload") from None
 
     user = get_user(uid)
     if user is None:

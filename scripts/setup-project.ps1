@@ -12,14 +12,12 @@ if (-not (Test-Path $venv)) {
 }
 & "$venv\Scripts\pip.exe" install -r "$Root\backend\requirements.txt" -q
 
-# ML dataset + model
+# ML dataset + model — always sync sample into active so training uses latest data
 $active = Join-Path $Root "backend\models\active_dataset.csv"
 $sample = Join-Path $Root "ml\data\sample_crop_data.csv"
-if (-not (Test-Path $active)) {
-    Copy-Item $sample $active
-    Write-Host "Copied sample dataset to backend\models\active_dataset.csv"
-}
-python "$Root\ml\train.py"
+Copy-Item -Force $sample $active
+Write-Host "Using ml\data\sample_crop_data.csv -> backend\models\active_dataset.csv"
+& "$venv\Scripts\python.exe" "$Root\ml\train.py"
 Write-Host "ML model trained -> backend\models\crop_model.joblib"
 
 # Flutter

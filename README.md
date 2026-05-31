@@ -42,7 +42,7 @@ git pull
 | File | Purpose |
 |------|---------|
 | `backend/.env` | API keys, admin email/password, DB path |
-| `backend/edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json` | Firebase Admin SDK — in repo after [owner allows push](#firebase-admin-sdk-json-repo-owner) |
+| `backend/edissaproject-firebase-adminsdk-fbsvc-b718f54352.json` | Firebase Admin SDK (service account) |
 | `backend/crops_recommendation.db` | Local SQLite (legacy / backup) |
 | `backend/models/crop_model.joblib` | Trained ML model |
 | `lib/firebase_options.dart` | Flutter Firebase config |
@@ -92,7 +92,7 @@ Creates `backend/.venv`, installs Python packages, runs `flutter pub get`, and v
 `backend/.env` is ready. It points to:
 
 ```text
-FIREBASE_CREDENTIALS_PATH=./edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json
+FIREBASE_CREDENTIALS_PATH=./edissaproject-firebase-adminsdk-fbsvc-b718f54352.json
 FIREBASE_PROJECT_ID=edissaproject
 ```
 
@@ -277,12 +277,12 @@ GitHub **blocks** pushing the service account file automatically. The repo owner
 
 ```powershell
 cd backend
-git add edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json
+git add edissaproject-firebase-adminsdk-fbsvc-b718f54352.json
 git commit -m "chore: add Firebase Admin SDK for collaborators"
 git push origin main
 ```
 
-Until then, copy `backend/edissaproject-firebase-adminsdk-fbsvc-eae48edf0e.json` from a teammate or Firebase Console → Service accounts → Generate new private key, and keep the path in `backend/.env`.
+Until then, copy `backend/edissaproject-firebase-adminsdk-fbsvc-b718f54352.json` from a teammate or Firebase Console → Service accounts → Generate new private key, and set `FIREBASE_CREDENTIALS_PATH` in `backend/.env`.
 
 ---
 

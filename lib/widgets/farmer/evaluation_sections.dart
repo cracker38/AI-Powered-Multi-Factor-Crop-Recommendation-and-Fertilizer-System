@@ -346,3 +346,67 @@ class PrecisionNotesSection extends StatelessWidget {
     );
   }
 }
+
+class ImprovementActionsSection extends StatelessWidget {
+  const ImprovementActionsSection({super.key, required this.actions, required this.confidencePct});
+
+  final List<String> actions;
+  final String confidencePct;
+
+  @override
+  Widget build(BuildContext context) {
+    if (actions.isEmpty) return const SizedBox.shrink();
+    return FarmerCard(
+      borderColor: const Color(0xFFE65100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.priority_high_rounded, color: Color(0xFFE65100)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Improve your field first',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    Text(
+                      'Suitability is $confidencePct% (below 50%) — complete these steps for a stronger match',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...actions.map(
+            (a) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFFE65100)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(a, style: const TextStyle(height: 1.45, color: AppColors.textPrimary)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
