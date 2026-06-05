@@ -176,11 +176,24 @@ Defaults: `lib/core/constants.dart`.
 
 ---
 
+## Agricultural Decision Support System (ADSS)
+
+For each field evaluation, the API (`backend/app/agronomy_advisor.py` + ML in `ml_service.py`) performs:
+
+1. **Environmental analysis** — soil texture, pH, macronutrients, moisture, rainfall, temperature, humidity, and Rwanda season context.
+2. **Crop suitability** — ranked crops with a **suitability index (0–100%)** blending agronomic rules and the trained model.
+3. **Fertilizer planning** — Urea, DAP, MOP, lime, and organic recommendations when suitability is agronomically meaningful (deferred when suitability &lt; 35%).
+4. **Scientific reasoning** — plain-language explanation, precision notes, and an improvement plan when suitability &lt; 50%.
+
+The Flutter result screen shows **Soil & climate analysis**, fertilizer plan, weather, and **Scientific reasoning** sections. Saved history includes the same `environment_analysis` payload when `persist` is enabled.
+
+---
+
 ## Features
 
 | Area | What it does |
 |------|----------------|
-| Crop AI | Ranks crops from soil N-P-K, pH, moisture, season |
+| Crop ADSS | Ranks crops from soil N-P-K, pH, moisture, season + agronomic rules |
 | Fertilizer | Urea, DAP, MOP, lime, organic matter from gaps |
 | Soil health | Composite score from field readings |
 | Weather | 7-day Open-Meteo forecast per Rwanda district |

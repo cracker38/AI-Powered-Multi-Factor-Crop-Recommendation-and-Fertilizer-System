@@ -1,6 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeout
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -8,28 +5,16 @@ from app.config import settings
 from app.deps import get_current_user
 from app.firebase_app import token_uid, verify_id_token
 from app.firestore_db import UserRecord, get_user, get_user_by_email, upsert_user
+from app.firestore_timeout import run_firestore
 from app.schemas import RegisterFarmerRequest, UpdateFarmerProfileRequest, UserProfile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer = HTTPBearer()
 
-_FIRESTORE_TIMEOUT_SEC = 12.0
-
 
 def _firestore_user(uid: str) -> UserRecord | None:
     """Load user from Firestore with a timeout (invalid service account keys hang)."""
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(get_user, uid)
-        try:
-            return fut.result(timeout=_FIRESTORE_TIMEOUT_SEC)
-        except FuturesTimeout:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Firestore timed out. Regenerate the Firebase Admin SDK JSON in "
-                    "Firebase Console, update backend/.env, then run scripts/seed_admin.py."
-                ),
-            ) from None
+    return run_firestore("profile lookup", get_user, uid)
 
 
 def _profile(user: UserRecord) -> UserProfile:
@@ -66,11 +51,13 @@ def register_farmer(
             detail="This email is reserved for system administration and cannot be used for farmer registration.",
         )
 
-    existing = get_user(uid)
+    existing = run_firestore("user lookup", get_user, uid)
     if existing:
         if existing.role == "admin":
             raise HTTPException(status_code=403, detail="Admin accounts cannot use farmer registration")
-        user = upsert_user(
+        user = run_firestore(
+            "profile update",
+            upsert_user,
             uid,
             email=email,
             display_name=body.display_name,
@@ -81,10 +68,12 @@ def register_farmer(
         )
         return _profile(user)
 
-    if get_user_by_email(email):
+    if run_firestore("email lookup", get_user_by_email, email):
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    user = upsert_user(
+    user = run_firestore(
+        "profile create",
+        upsert_user,
         uid,
         email=email,
         display_name=body.display_name,
@@ -133,7 +122,7 @@ def sync_after_login(creds: HTTPAuthorizationCredentials = Depends(bearer)):
 
     uid = token_uid(decoded)
     email = (decoded.get("email") or "").strip().lower()
-    user = _firestore_user(uid)
+    user = get_user(uid)
     if user is None and email == settings.admin_email_normalized:
         upsert_user(
             uid,
@@ -142,7 +131,7 @@ def sync_after_login(creds: HTTPAuthorizationCredentials = Depends(bearer)):
             role="admin",
             disabled=False,
         )
-        user = _firestore_user(uid)
+        user = get_user(uid)
     if user is None:
         if email == settings.admin_email_normalized:
             raise HTTPException(

@@ -124,21 +124,29 @@ def recommend_fertilizers(
         f"targets: N {targets['N']}, P {targets['P']}, K {targets['K']} kg/ha."
     )
 
+    defer_macros = soil_ph < 5.5
+
     # pH correction (priority before macro-nutrients)
     if soil_ph < 5.8:
-        lime_t = 2.5 if soil_ph < 5.2 else 1.5
+        ph_gap = max(0.0, 6.2 - soil_ph)
+        lime_t = round(1.2 + ph_gap * 2.8, 1)
+        lime_t = min(4.5, max(1.0, lime_t))
         recs.append(
             {
                 "name": "Agricultural lime (CaCO₃)",
                 "type": "soil_amendment",
-                "application_rate": f"{lime_t:.1f}–{lime_t + 1.5:.1f} t/ha",
+                "application_rate": f"{lime_t:.1f}–{lime_t + 1.0:.1f} t/ha",
                 "timing": "Incorporate 4–6 weeks before planting; retest pH after 3 months",
                 "purpose": f"Raise pH from {soil_ph:.1f} toward 6.0–6.5 for {crop}",
                 "priority": "high",
                 "npk": "—",
             }
         )
-        notes.append("Acidic soil limits P and Ca uptake — liming is recommended before fertilizer investment.")
+        notes.append(
+            "Acidic soil limits P and Ca uptake — complete liming before urea/DAP/MOP investment."
+            if defer_macros
+            else "Acidic soil limits nutrient uptake — lime before or with basal fertilizer."
+        )
     elif soil_ph > 7.8:
         recs.append(
             {
@@ -158,8 +166,29 @@ def recommend_fertilizers(
             notes.append("Legume crop — avoid heavy urea; rely on rhizobia fixation after inoculation.")
         gaps["N"] = min(gaps["N"], 15)
 
+    if defer_macros:
+        notes.append("Macro fertilizers deferred until pH reaches ≥5.5 — apply lime first, then retest soil.")
+        if not recs:
+            recs.append(
+                {
+                    "name": "Soil retest after liming",
+                    "type": "maintenance",
+                    "application_rate": "N, P, K + pH analysis",
+                    "timing": "6–8 weeks after lime incorporation",
+                    "purpose": "Confirm pH correction before fertilizer application",
+                    "priority": "high",
+                    "npk": "—",
+                }
+            )
+        priority_order = {"high": 0, "medium": 1, "low": 2}
+        recs.sort(key=lambda r: priority_order.get(r.get("priority", "medium"), 1))
+        return recs, analysis, notes
+
+    macro_gaps = sum(1 for k in ("N", "P", "K") if gaps[k] > 12)
+    use_compound_only = macro_gaps >= 3 and gaps["N"] > 15 and gaps["P"] > 10 and gaps["K"] > 10
+
     # Nitrogen — urea with split schedule
-    if gaps["N"] > 20:
+    if not use_compound_only and gaps["N"] > 20:
         urea_kg = round(gaps["N"] / 0.46)
         recs.append(
             {
@@ -176,7 +205,7 @@ def recommend_fertilizers(
         notes.append("Excess nitrogen detected — reduce urea to prevent lodging, pest pressure, and leaching.")
 
     # Phosphorus — DAP basal
-    if gaps["P"] > 12:
+    if not use_compound_only and gaps["P"] > 12:
         dap_kg = round(gaps["P"] / 0.20)
         recs.append(
             {
@@ -191,7 +220,7 @@ def recommend_fertilizers(
         )
 
     # Potassium — MOP (critical for banana, potato, coffee)
-    if gaps["K"] > 12:
+    if not use_compound_only and gaps["K"] > 12:
         mop_kg = round(gaps["K"] / 0.50)
         recs.append(
             {
@@ -205,19 +234,23 @@ def recommend_fertilizers(
             }
         )
 
-    # Balanced compound when multiple gaps moderate
-    if gaps["N"] > 15 and gaps["P"] > 10 and gaps["K"] > 10:
+    # Balanced compound when all macros are moderately deficient (avoids triple overlap)
+    if use_compound_only:
+        n_equiv = gaps["N"]
+        compound_kg = round(max(200, min(350, (n_equiv / 0.17) * 0.65)))
         recs.append(
             {
                 "name": "NPK 17-17-17 compound",
                 "type": "compound",
-                "application_rate": "250 kg/ha (125 kg at planting + 125 kg top-dress)",
-                "timing": "Split application aligned with crop growth stages",
-                "purpose": "Balanced macro-nutrient supply where soil test shows broad deficiency",
-                "priority": "medium",
+                "application_rate": f"{compound_kg} kg/ha ({round(compound_kg * 0.17):.0f} kg N, "
+                f"{round(compound_kg * 0.17):.0f} kg P, {round(compound_kg * 0.17):.0f} kg K equivalent)",
+                "timing": "60% basal at planting, 40% top-dress at vegetative peak",
+                "purpose": "Single balanced application where N, P, and K are all below target",
+                "priority": "high",
                 "npk": "17-17-17",
             }
         )
+        notes.append("Broad macro deficiency — compound fertilizer used instead of separate urea/DAP/MOP to avoid over-application.")
 
     # Micronutrients for high-value crops
     if crop_key in {"coffee", "tea", "banana"} and soil_ph > 6.5:

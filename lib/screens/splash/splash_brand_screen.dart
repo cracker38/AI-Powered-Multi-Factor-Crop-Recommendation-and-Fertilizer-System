@@ -10,11 +10,9 @@ class SplashBrandScreen extends StatefulWidget {
   const SplashBrandScreen({
     super.key,
     this.animate = false,
-    this.onAutoAdvance,
   });
 
   final bool animate;
-  final VoidCallback? onAutoAdvance;
 
   @override
   State<SplashBrandScreen> createState() => _SplashBrandScreenState();
@@ -41,11 +39,6 @@ class _SplashBrandScreenState extends State<SplashBrandScreen> with TickerProvid
     );
     if (widget.animate) {
       _main.forward();
-      if (widget.onAutoAdvance != null) {
-        Future<void>.delayed(const Duration(milliseconds: 2800), () {
-          if (mounted) widget.onAutoAdvance!();
-        });
-      }
     } else {
       _main.value = 1;
     }

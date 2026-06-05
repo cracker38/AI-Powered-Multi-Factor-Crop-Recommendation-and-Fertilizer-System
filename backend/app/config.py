@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     admin_email: str = "uwayiedissa@gmail.com"
     admin_password: str = ""
     database_url: str = "sqlite:///./crops_recommendation.db"
+    # Use sqlite when Firestore gRPC hangs (common on Windows). Set firestore for cloud-only deploy.
+    storage_backend: str = "sqlite"
 
     @property
     def admin_email_normalized(self) -> str:

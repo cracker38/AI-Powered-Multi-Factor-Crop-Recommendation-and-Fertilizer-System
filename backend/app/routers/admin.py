@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from app.deps import require_admin
+from app.firestore_timeout import run_firestore
 from app.firebase_app import delete_firebase_user, disable_firebase_user
 from app.firestore_db import (
     UserRecord,
@@ -511,37 +512,40 @@ def mark_notification_read_route(notification_id: str, _: UserRecord = Depends(r
 
 @router.get("/analytics", response_model=ModelStatusResponse)
 def analytics(_: UserRecord = Depends(require_admin)):
-    loaded = MODEL_PATH.exists()
-    meta = _load_meta() if loaded else get_model_meta()
-    farmers = count_farmers()
-    preds = count_predictions()
-    acc, prec, rec, f1 = _model_metrics(meta)
-    last_trained = None
-    if meta and meta.get("updated_at"):
-        last_trained = _ts(meta.get("updated_at"))
-    elif get_model_meta():
-        last_trained = _ts(get_model_meta().get("updated_at"))
+    def _build() -> ModelStatusResponse:
+        loaded = MODEL_PATH.exists()
+        meta = _load_meta() if loaded else get_model_meta()
+        farmers = count_farmers()
+        preds = count_predictions()
+        acc, prec, rec, f1 = _model_metrics(meta)
+        last_trained = None
+        if meta and meta.get("updated_at"):
+            last_trained = _ts(meta.get("updated_at"))
+        elif get_model_meta():
+            last_trained = _ts(get_model_meta().get("updated_at"))
 
-    outcomes = outcome_analytics()
-    return ModelStatusResponse(
-        model_loaded=loaded,
-        model_version=meta.get("best_model") if meta else None,
-        meta=meta,
-        training_datasets_count=count_datasets(),
-        total_predictions=preds,
-        total_farmers=farmers,
-        active_farmers=count_active_farmers(),
-        disabled_farmers=count_disabled_farmers(),
-        avg_predictions_per_farmer=round(preds / farmers, 2) if farmers else 0.0,
-        crop_distribution=crop_distribution(),
-        model_accuracy=float(acc) if acc is not None else None,
-        model_precision=float(prec) if prec is not None else None,
-        model_recall=float(rec) if rec is not None else None,
-        model_f1=float(f1) if f1 is not None else None,
-        last_trained_at=last_trained,
-        fertilizer_usage=fertilizer_usage_stats(),
-        avg_soil_health_score=avg_soil_health_score(),
-        outcome_feedback_count=outcomes.get("outcome_feedback_count", 0),
-        avg_outcome_rating=outcomes.get("avg_outcome_rating"),
-        fertilizer_follow_rate_pct=outcomes.get("fertilizer_follow_rate_pct"),
-    )
+        outcomes = outcome_analytics()
+        return ModelStatusResponse(
+            model_loaded=loaded,
+            model_version=meta.get("best_model") if meta else None,
+            meta=meta,
+            training_datasets_count=count_datasets(),
+            total_predictions=preds,
+            total_farmers=farmers,
+            active_farmers=count_active_farmers(),
+            disabled_farmers=count_disabled_farmers(),
+            avg_predictions_per_farmer=round(preds / farmers, 2) if farmers else 0.0,
+            crop_distribution=crop_distribution(),
+            model_accuracy=float(acc) if acc is not None else None,
+            model_precision=float(prec) if prec is not None else None,
+            model_recall=float(rec) if rec is not None else None,
+            model_f1=float(f1) if f1 is not None else None,
+            last_trained_at=last_trained,
+            fertilizer_usage=fertilizer_usage_stats(),
+            avg_soil_health_score=avg_soil_health_score(),
+            outcome_feedback_count=outcomes.get("outcome_feedback_count", 0),
+            avg_outcome_rating=outcomes.get("avg_outcome_rating"),
+            fertilizer_follow_rate_pct=outcomes.get("fertilizer_follow_rate_pct"),
+        )
+
+    return run_firestore("analytics dashboard", _build, timeout_sec=20.0)

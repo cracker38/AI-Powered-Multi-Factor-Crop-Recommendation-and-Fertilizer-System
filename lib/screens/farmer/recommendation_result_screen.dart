@@ -123,6 +123,10 @@ class RecommendationResultScreen extends StatelessWidget {
               confidencePct: pctLabel,
             ),
           if (prediction.improvementActions.isNotEmpty) const SizedBox(height: 12),
+          if (prediction.environmentAnalysis.isNotEmpty) ...[
+            EnvironmentAnalysisSection(lines: prediction.environmentAnalysis),
+            const SizedBox(height: 12),
+          ],
           if (prediction.soilHealthScore > 0)
             SoilHealthCard(score: prediction.soilHealthScore, label: prediction.soilHealthLabel),
           const SizedBox(height: 12),
@@ -133,7 +137,7 @@ class RecommendationResultScreen extends StatelessWidget {
           const SizedBox(height: 12),
           if (prediction.weatherInsight != null) WeatherInsightSection(weather: prediction.weatherInsight!),
           const SizedBox(height: 12),
-          PrecisionNotesSection(notes: prediction.precisionNotes),
+          if (prediction.precisionNotes.isNotEmpty) PrecisionNotesSection(notes: prediction.precisionNotes),
           const SizedBox(height: 12),
           FarmerCard(
             child: Column(
@@ -147,10 +151,10 @@ class RecommendationResultScreen extends StatelessWidget {
                         color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.science_outlined, color: AppColors.primary),
+                      child: const Icon(Icons.biotech_rounded, color: AppColors.primary),
                     ),
                     const SizedBox(width: 12),
-                    const Text('ML suitability', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const Text('Scientific reasoning', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                   ],
                 ),
                 const SizedBox(height: 14),

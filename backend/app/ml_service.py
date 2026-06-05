@@ -7,7 +7,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from app.crop_suitability import SEASON_LABELS, hybrid_rank, suitability_score
+from app.agronomy_advisor import FieldConditions, build_agronomy_report
+from app.crop_suitability import hybrid_rank
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_PATH = MODEL_DIR / "crop_model.joblib"
@@ -15,7 +16,9 @@ META_PATH = MODEL_DIR / "model_meta.json"
 ACTIVE_DATASET = MODEL_DIR / "active_dataset.csv"
 DEFAULT_DATASET = Path(__file__).resolve().parent.parent.parent / "ml" / "data" / "sample_crop_data.csv"
 
-FEATURE_ORDER = ["N", "P", "K", "soil_moisture", "temperature", "humidity", "ph", "rainfall"]
+NUMERIC_FEATURES = ["N", "P", "K", "soil_moisture", "temperature", "humidity", "ph", "rainfall"]
+CATEGORICAL_FEATURES = ["soil_type", "season"]
+FEATURE_ORDER = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
 def _load_meta() -> dict:
@@ -42,40 +45,20 @@ def build_explanation(
     district: str | None,
     factor_notes: dict[str, list[str]],
 ) -> str:
-    conf_pct = ranked[0][1] * 100
-    season_label = SEASON_LABELS.get(season, season.replace("_", " "))
-    parts = [
-        f"Primary recommendation: {top.title()} ({conf_pct:.1f}% suitability index) "
-        f"for {soil_type} soil during {season_label}"
-        + (f" in {district}." if district else "."),
-        "This ranking blends machine-learning patterns from historical crop–soil data "
-        "with Rwanda extension guidelines for nutrients, pH, rainfall, and season timing.",
-    ]
-
-    top_notes = factor_notes.get(top, [])
-    if top_notes:
-        parts.append(top_notes[0])
-    if len(top_notes) > 1:
-        parts.append(top_notes[1])
-
-    ph = row["ph"]
-    if ph < 5.8:
-        parts.append(
-            f"Soil pH ({ph:.1f}) is acidic — liming before planting improves P availability and root growth."
-        )
-    elif ph > 7.5:
-        parts.append(f"Soil pH ({ph:.1f}) is alkaline — consider sulfur or organic matter to unlock micronutrients.")
-
-    if row["N"] < 50:
-        parts.append("Nitrogen is below typical smallholder levels; plan split urea or legume rotation.")
-    if row["rainfall"] < 450 and season == "season_c":
-        parts.append("Dry-season conditions favour drought-tolerant crops (cassava, sorghum, sweet potato).")
-
-    alts = [c for c, _ in ranked[1:3] if c != top]
-    if alts:
-        parts.append(f"Strong alternatives: {', '.join(a.title() for a in alts)}.")
-
-    return " ".join(parts)
+    field = FieldConditions(
+        nitrogen=row["N"],
+        phosphorus=row["P"],
+        potassium=row["K"],
+        soil_moisture=row["soil_moisture"],
+        temperature_c=row["temperature"],
+        humidity_pct=row["humidity"],
+        soil_ph=row["ph"],
+        rainfall_mm=row["rainfall"],
+        soil_type=soil_type,
+        season=season,
+        district=district,
+    )
+    return build_agronomy_report(field, ranked, factor_notes).explanation
 
 
 def predict_ranked(
@@ -103,8 +86,12 @@ def predict_ranked(
         "humidity": humidity_pct,
         "ph": soil_ph,
         "rainfall": rainfall_mm,
+        "soil_type": (soil_type or "loam").lower().strip(),
+        "season": (season or "season_a").lower().strip(),
     }
-    X = pd.DataFrame([row], columns=FEATURE_ORDER)
+    meta = _load_meta()
+    feature_order = meta.get("feature_order", FEATURE_ORDER)
+    X = pd.DataFrame([{k: row[k] for k in feature_order}], columns=feature_order)
     clf = pipeline.named_steps["clf"]
     prep = pipeline.named_steps["prep"]
     classes = np.asarray(clf.classes_)
@@ -136,21 +123,29 @@ def predict_ranked(
         top_k=top_k,
     )
 
-    meta = _load_meta()
     version = meta.get("best_model", "unknown")
-    explanation = build_explanation(
-        row,
-        ranked[0][0],
-        ranked,
+    field = FieldConditions(
+        nitrogen=nitrogen,
+        phosphorus=phosphorus,
+        potassium=potassium,
+        soil_moisture=soil_moisture,
+        temperature_c=temperature_c,
+        humidity_pct=humidity_pct,
+        soil_ph=soil_ph,
+        rainfall_mm=rainfall_mm,
         soil_type=soil_type or "loam",
         season=season or "season_a",
         district=district,
-        factor_notes=factor_notes,
     )
+    report = build_agronomy_report(field, ranked, factor_notes)
+    explanation = report.explanation
     return ranked, explanation, {
-        "model_version": f"{version}+agronomy",
+        "model_version": f"{version}+adss",
         "meta": meta,
         "factor_notes": factor_notes,
+        "environment_analysis": report.environment_analysis,
+        "precision_notes_adss": report.precision_notes,
+        "fertilizer_applicable": report.fertilizer_applicable,
     }
 
 

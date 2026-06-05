@@ -138,6 +138,7 @@ class PredictionDetailItem(BaseModel):
     nutrient_analysis: NutrientAnalysis | None = None
     weather_insight: WeatherInsight | None = None
     precision_notes: list[str] = []
+    environment_analysis: list[str] = []
     full_ranking: list[CropRankItem] = []
     has_feedback: bool = False
     feedback_rating: int | None = None
@@ -158,6 +159,7 @@ class CropPredictionResponse(BaseModel):
     nutrient_analysis: NutrientAnalysis | None = None
     weather_insight: WeatherInsight | None = None
     precision_notes: list[str] = []
+    environment_analysis: list[str] = []
     season_used: str = "season_a"
     season_label: str = ""
     improvement_actions: list[str] = []

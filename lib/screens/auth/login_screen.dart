@@ -17,7 +17,7 @@ import 'register_screen.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onAuthenticated, this.initialError});
 
-  final void Function() onAuthenticated;
+  final Future<void> Function() onAuthenticated;
   final String? initialError;
 
   @override
@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
       final profile = await SessionBootstrap.loadProfile(api);
       await FirestoreService().syncCurrentAuthUser(profile);
-      widget.onAuthenticated();
+      await widget.onAuthenticated();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = authErrorMessage(e));
     } on ApiException catch (e) {

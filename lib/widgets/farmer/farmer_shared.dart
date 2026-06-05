@@ -217,6 +217,10 @@ Future<void> showFarmerEvaluationDetail(
                   confidencePct: (detail.topConfidence * 100).toStringAsFixed(1),
                 ),
               if (detail.improvementActions.isNotEmpty) const SizedBox(height: 12),
+              if (detail.environmentAnalysis.isNotEmpty) ...[
+                EnvironmentAnalysisSection(lines: detail.environmentAnalysis),
+                const SizedBox(height: 12),
+              ],
               if (detail.soilHealthScore > 0)
                 SoilHealthCard(score: detail.soilHealthScore, label: detail.soilHealthLabel),
               const SizedBox(height: 12),
@@ -226,7 +230,7 @@ Future<void> showFarmerEvaluationDetail(
               const SizedBox(height: 8),
               if (detail.weatherInsight != null) WeatherInsightSection(weather: detail.weatherInsight!),
               const SizedBox(height: 12),
-              _detailBlock('ML explanation', detail.explanation),
+              _detailBlock('Scientific reasoning', detail.explanation),
               const SizedBox(height: 16),
               _detailBlock(
                 'Field data',

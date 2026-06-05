@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/rwanda_districts.dart';
+import '../../models/user_profile.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
@@ -14,7 +17,7 @@ import '../../widgets/shared/modern_auth_decor.dart';
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, required this.onRegistered});
 
-  final VoidCallback onRegistered;
+  final Future<void> Function() onRegistered;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -54,16 +57,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
     });
     try {
-      await _auth.registerFarmer(_email.text, _password.text);
-      final base = await _auth.readApiBase();
-      final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
-      final profile = await api.registerFarmer(
+      final cred = await _auth.registerFarmer(_email.text, _password.text);
+      final user = cred.user ?? FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw FirebaseAuthException(code: 'user-not-found', message: 'Could not create Firebase account');
+      }
+      await user.getIdToken(true);
+
+      final profile = UserProfile(
+        id: user.uid,
+        email: (user.email ?? _email.text).trim().toLowerCase(),
         displayName: _name.text.trim(),
+        role: 'farmer',
+        disabled: false,
         phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-        district: _district,
+        district: _district != null && _district!.isNotEmpty ? _district : null,
       );
+
+      // Save to Firestore first so registration works even if the API/Firestore Admin SDK is slow.
       await FirestoreService().upsertUserProfile(profile);
-      widget.onRegistered();
+
+      var apiSynced = false;
+      try {
+        final base = await _auth.readApiBase();
+        final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
+        final synced = await api
+            .registerFarmer(
+              displayName: profile.displayName ?? _name.text.trim(),
+              phone: profile.phone,
+              district: profile.district,
+            )
+            .timeout(const Duration(seconds: 12));
+        await FirestoreService().upsertUserProfile(synced);
+        apiSynced = true;
+      } on ApiException catch (e) {
+        if (e.statusCode == 409 || e.statusCode == 403) {
+          rethrow;
+        }
+        apiSynced = false;
+      } on TimeoutException {
+        apiSynced = false;
+      } catch (_) {
+        apiSynced = false;
+      }
+
+      if (!mounted) return;
+      await widget.onRegistered();
+      if (mounted) {
+        Navigator.of(context).pop();
+        if (!apiSynced) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Account created. The server was slow — your profile was saved in Firebase. '
+                'Start the API on port 8000 for full features.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? 'Registration failed');
       await _auth.signOut();
@@ -71,7 +124,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = e.message);
       await _auth.signOut();
     } catch (e) {
-      setState(() => _error = e.toString());
+      final detail = e.toString();
+      final unreachable = detail.contains('Connection refused') ||
+          detail.contains('Failed host lookup') ||
+          detail.contains('Failed to fetch') ||
+          detail.contains('SocketException');
+      setState(() => _error = unreachable
+          ? 'Could not reach the API. Your Firebase login may still work — ensure scripts/start-api.ps1 is running on port 8000.'
+          : detail);
       await _auth.signOut();
     } finally {
       if (mounted) setState(() => _busy = false);

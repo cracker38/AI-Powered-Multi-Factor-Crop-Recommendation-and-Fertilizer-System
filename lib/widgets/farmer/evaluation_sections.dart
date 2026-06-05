@@ -303,6 +303,56 @@ class WeatherInsightSection extends StatelessWidget {
   }
 }
 
+class EnvironmentAnalysisSection extends StatelessWidget {
+  const EnvironmentAnalysisSection({super.key, required this.lines});
+
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return FarmerCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.landscape_rounded, color: Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Soil & climate analysis',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• ', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  Expanded(
+                    child: Text(line, style: const TextStyle(height: 1.45, color: AppColors.textSecondary)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class PrecisionNotesSection extends StatelessWidget {
   const PrecisionNotesSection({super.key, required this.notes});
   final List<String> notes;

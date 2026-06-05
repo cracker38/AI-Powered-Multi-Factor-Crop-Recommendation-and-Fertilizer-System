@@ -72,32 +72,42 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         _error = null;
       });
     }
-    await widget.admin.checkApiHealth();
-    final analytics = await widget.admin.loadAnalytics(force: !silent);
-    if (!mounted) return;
-    if (analytics == null) {
-      setState(() {
-        _error = widget.admin.analyticsError ?? 'Could not load dashboard data';
-        _analytics = null;
-        _loading = false;
-      });
-      return;
-    }
     try {
-      final recent = await widget.admin.loadRecentPredictions(limit: 8);
-      final logsJson = await widget.admin.api.adminActivityLogs(limit: 6);
+      await widget.admin.checkApiHealth();
+      final analytics = await widget.admin.loadAnalytics(force: !silent);
+      if (!mounted) return;
+      if (analytics == null) {
+        setState(() {
+          _error = widget.admin.analyticsError ?? 'Could not load dashboard data';
+          _analytics = null;
+          _loading = false;
+        });
+        return;
+      }
+      try {
+        final recent = await widget.admin.loadRecentPredictions(limit: 8);
+        final logsJson = await widget.admin.api.adminActivityLogs(limit: 6);
+        if (!mounted) return;
+        setState(() {
+          _analytics = analytics;
+          _recent = recent;
+          _activity = logsJson.map(AdminActivityLog.fromJson).toList();
+          _lastRefresh = DateTime.now();
+          _loading = false;
+          _error = null;
+        });
+      } on ApiException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _analytics = analytics;
+          _error = e.message;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _analytics = analytics;
-        _recent = recent;
-        _activity = logsJson.map(AdminActivityLog.fromJson).toList();
-        _lastRefresh = DateTime.now();
-        _loading = false;
-        _error = null;
-      });
-    } on ApiException catch (e) {
-      setState(() {
-        _analytics = analytics;
-        _error = e.message;
+        _error = e.toString();
         _loading = false;
       });
     }
@@ -126,15 +136,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildHeader(context)),
-          if (_loading)
+          if (_loading && _analytics == null)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
             )
-          else if (_error != null)
-            SliverToBoxAdapter(
-              child: Padding(padding: const EdgeInsets.all(20), child: _errorBanner(_error!)),
-            )
           else ...[
+            if (_error != null)
+              SliverToBoxAdapter(
+                child: Padding(padding: const EdgeInsets.all(20), child: _errorBanner(_error!)),
+              ),
+            if (_analytics != null) ...[
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               sliver: SliverToBoxAdapter(child: _systemStatusBanner()),
@@ -290,6 +301,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 ),
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
+            ],
           ],
         ],
       ),

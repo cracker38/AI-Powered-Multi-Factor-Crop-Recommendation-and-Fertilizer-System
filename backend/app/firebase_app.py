@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import firebase_admin
@@ -22,6 +23,8 @@ def ensure_firebase() -> None:
     global _initialized, _use_admin_sdk
     if _initialized:
         return
+    # Helps Firestore Admin SDK connect on some Windows networks (avoids gRPC DNS hangs).
+    os.environ.setdefault("GRPC_DNS_RESOLVER", "native")
     if _credentials_file_exists():
         cred = credentials.Certificate(settings.firebase_credentials_path)
         firebase_admin.initialize_app(cred)

@@ -92,7 +92,7 @@ class _FarmerDashboardPageState extends State<FarmerDashboardPage> {
                     apiOnline: f.apiOnline && f.error == null,
                   ),
                 ),
-                if (f.loading && f.history.isEmpty)
+                if (f.loading && f.history.isEmpty && f.error == null)
                   const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                   )

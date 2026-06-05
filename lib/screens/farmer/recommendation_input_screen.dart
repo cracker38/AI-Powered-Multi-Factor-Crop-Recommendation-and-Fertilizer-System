@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/agriculture_options.dart';
 import '../../core/farmer_theme.dart';
 import '../../core/rwanda_season.dart';
 import '../../models/farm_input.dart';

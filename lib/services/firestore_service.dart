@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/crop_prediction.dart';
 import '../models/farm_input.dart';
+import '../models/prediction_history_item.dart';
 import '../models/user_profile.dart';
 
 /// Mirrors app data to Firestore (visible in Firebase Console).
@@ -59,6 +60,33 @@ class FirestoreService {
       phone: data['phone'] as String?,
       district: data['district'] as String?,
     );
+  }
+
+  Future<List<PredictionHistoryItem>> fetchMyPredictionHistory({int limit = 50}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return [];
+    final snaps = await _predictions.where('user_uid', isEqualTo: uid).limit(limit).get();
+    final items = snaps.docs.map((doc) {
+      final d = doc.data();
+      final created = d['created_at'];
+      DateTime when = DateTime.now();
+      if (created is Timestamp) {
+        when = created.toDate();
+      }
+      return PredictionHistoryItem(
+        id: doc.id,
+        topCrop: d['top_crop'] as String? ?? '',
+        topConfidence: (d['top_confidence'] as num?)?.toDouble() ?? 0,
+        createdAt: when,
+        soilPh: (d['soil_ph'] as num?)?.toDouble() ?? 0,
+        nitrogen: (d['nitrogen'] as num?)?.toDouble() ?? 0,
+        soilType: d['soil_type'] as String? ?? 'loam',
+        season: d['season'] as String? ?? 'season_a',
+        soilHealthScore: (d['soil_health_score'] as num?)?.toDouble() ?? 0,
+      );
+    }).toList();
+    items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return items;
   }
 
   Future<void> savePrediction({

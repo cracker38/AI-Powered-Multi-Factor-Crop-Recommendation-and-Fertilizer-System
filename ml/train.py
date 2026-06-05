@@ -13,7 +13,7 @@ from sklearn.metrics import accuracy_score, classification_report, precision_rec
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
 ROOT = Path(__file__).resolve().parent
@@ -23,7 +23,9 @@ MODEL_DIR = ROOT.parent / "backend" / "models"
 MODEL_PATH = MODEL_DIR / "crop_model.joblib"
 META_PATH = MODEL_DIR / "model_meta.json"
 
-FEATURES = ["N", "P", "K", "soil_moisture", "temperature", "humidity", "ph", "rainfall"]
+NUMERIC_FEATURES = ["N", "P", "K", "soil_moisture", "temperature", "humidity", "ph", "rainfall"]
+CATEGORICAL_FEATURES = ["soil_type", "season"]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 LABEL = "label"
 
 
@@ -42,14 +44,20 @@ def evaluate(y_true, y_pred, labels):
 
 
 def build_pipelines(random_state: int = 42):
-    pre = ColumnTransformer([("scale", StandardScaler(), FEATURES)], remainder="drop")
+    pre = ColumnTransformer(
+        [
+            ("num", StandardScaler(), NUMERIC_FEATURES),
+            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CATEGORICAL_FEATURES),
+        ],
+        remainder="drop",
+    )
     return {
         "random_forest": Pipeline([
             ("prep", pre),
             ("clf", RandomForestClassifier(
-                n_estimators=300,
-                max_depth=14,
-                min_samples_leaf=2,
+                n_estimators=400,
+                max_depth=16,
+                min_samples_leaf=1,
                 random_state=random_state,
                 class_weight="balanced",
             )),
@@ -76,9 +84,15 @@ def build_pipelines(random_state: int = 42):
 
 def main():
     df = pd.read_csv(DATA_CSV).dropna()
-    for c in FEATURES:
+    for c in NUMERIC_FEATURES:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    df = df.dropna()
+    if "soil_type" not in df.columns:
+        df["soil_type"] = "loam"
+    if "season" not in df.columns:
+        df["season"] = "season_a"
+    df["soil_type"] = df["soil_type"].astype(str).str.lower().str.strip()
+    df["season"] = df["season"].astype(str).str.lower().str.strip()
+    df = df.dropna(subset=NUMERIC_FEATURES + [LABEL])
     X, y = df[FEATURES], df[LABEL]
     try:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
@@ -88,8 +102,13 @@ def main():
     best_name, best_acc, best_pipe = None, -1.0, None
     results = {}
     for name, pipe in build_pipelines().items():
-        n_splits = min(3, min(y_train.value_counts()))
-        cv = cross_val_score(pipe, X_train, y_train, cv=max(2, n_splits), scoring="accuracy") if n_splits >= 2 else np.array([0.0])
+        min_class = int(y_train.value_counts().min())
+        n_splits = min(5, min_class)
+        cv = (
+            cross_val_score(pipe, X_train, y_train, cv=n_splits, scoring="accuracy")
+            if n_splits >= 2
+            else np.array([0.0])
+        )
         pipe.fit(X_train, y_train)
         metrics = evaluate(y_test, pipe.predict(X_test), sorted(y.unique().tolist()))
         metrics["cv_accuracy_mean"] = float(cv.mean())

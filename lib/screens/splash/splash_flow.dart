@@ -29,6 +29,18 @@ class _SplashFlowState extends State<SplashFlow> {
   void initState() {
     super.initState();
     _init();
+    _scheduleFirstPageAutoAdvance();
+  }
+
+  void _scheduleFirstPageAutoAdvance() {
+    Future<void>.delayed(const Duration(milliseconds: 2800), () {
+      if (!mounted || _showBrandOnly || _page != 0) return;
+      if (!_pageController.hasClients) return;
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   Future<void> _init() async {
@@ -76,19 +88,7 @@ class _SplashFlowState extends State<SplashFlow> {
             controller: _pageController,
             onPageChanged: (i) => setState(() => _page = i),
             children: [
-              SplashBrandScreen(
-                animate: true,
-                onAutoAdvance: _page == 0
-                    ? () {
-                        if (_page == 0 && _pageController.hasClients) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 550),
-                            curve: Curves.easeOutCubic,
-                          );
-                        }
-                      }
-                    : null,
-              ),
+              const SplashBrandScreen(animate: true),
               const SplashOnboardingPage(
                 step: 1,
                 variant: 1,

@@ -36,6 +36,29 @@ class ApiService {
     };
   }
 
+  Future<http.Response> _timed(Future<http.Response> request) async {
+    try {
+      return await request.timeout(timeout);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. The API may be running but the database is slow — wait and tap Retry, or restart scripts/start-api.ps1.',
+        statusCode: 503,
+      );
+    }
+  }
+
+  Future<http.Response> _get(String path) async =>
+      _timed(http.get(_uri(path), headers: await _headers()));
+
+  Future<http.Response> _post(String path, {String? body}) async =>
+      _timed(http.post(_uri(path), headers: await _headers(), body: body));
+
+  Future<http.Response> _patch(String path, {String? body}) async =>
+      _timed(http.patch(_uri(path), headers: await _headers(), body: body));
+
+  Future<http.Response> _delete(String path) async =>
+      _timed(http.delete(_uri(path), headers: await _headers()));
+
   Future<dynamic> _handle(http.Response res) async {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return null;
@@ -52,9 +75,7 @@ class ApiService {
   }
 
   Future<UserProfile> syncProfile() async {
-    final res = await http
-        .post(_uri('/api/v1/auth/sync'), headers: await _headers())
-        .timeout(timeout);
+    final res = await _post('/api/v1/auth/sync');
     return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 
@@ -63,9 +84,8 @@ class ApiService {
     String? phone,
     String? district,
   }) async {
-    final res = await http.post(
-      _uri('/api/v1/auth/register-farmer'),
-      headers: await _headers(),
+    final res = await _post(
+      '/api/v1/auth/register-farmer',
       body: jsonEncode({
         'display_name': displayName,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
@@ -84,52 +104,41 @@ class ApiService {
     if (displayName != null) body['display_name'] = displayName;
     if (phone != null) body['phone'] = phone;
     if (district != null) body['district'] = district;
-    final res = await http.patch(
-      _uri('/api/v1/auth/profile'),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    );
+    final res = await _patch('/api/v1/auth/profile', body: jsonEncode(body));
     return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 
   Future<UserProfile> fetchMe() async {
-    final res = await http.get(_uri('/api/v1/auth/me'), headers: await _headers());
+    final res = await _get('/api/v1/auth/me');
     return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 
   Future<CropPrediction> evaluate(FarmInput input) async {
-    final res = await http.post(
-      _uri('/api/v1/predictions/evaluate'),
-      headers: await _headers(),
-      body: jsonEncode(input.toJson()),
-    );
+    final res = await _post('/api/v1/predictions/evaluate', body: jsonEncode(input.toJson()));
     return CropPrediction.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 
   Future<List<PredictionHistoryItem>> fetchHistory({int limit = 30}) async {
-    final res = await http.get(
-      _uri('/api/v1/predictions/history?limit=$limit'),
-      headers: await _headers(),
-    );
+    final res = await _get('/api/v1/predictions/history?limit=$limit');
     final list = (await _handle(res)) as List<dynamic>;
     return list.map((e) => PredictionHistoryItem.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<Map<String, dynamic>> fetchPredictionDetail(String id) async {
-    final res = await http.get(_uri('/api/v1/predictions/history/$id'), headers: await _headers());
+    final res = await _get('/api/v1/predictions/history/$id');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<List<Map<String, dynamic>>> fetchFarmerTips() async {
-    final res = await http.get(_uri('/api/v1/farmer/tips'), headers: await _headers());
+    final res = await _get('/api/v1/farmer/tips');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>?> fetchOutcomeFeedback(String predictionId) async {
-    final res = await http.get(
+    final res = await _timed(http.get(
       _uri('/api/v1/farmer/feedback/$predictionId'),
       headers: await _headers(),
-    );
+    ));
     if (res.statusCode == 404) return null;
     final data = await _handle(res);
     if (data == null || data is! Map<String, dynamic>) return null;
@@ -143,9 +152,8 @@ class ApiService {
     bool followedFertilizer = true,
     String? notes,
   }) async {
-    final res = await http.post(
-      _uri('/api/v1/farmer/feedback'),
-      headers: await _headers(),
+    final res = await _post(
+      '/api/v1/farmer/feedback',
       body: jsonEncode({
         'prediction_id': predictionId,
         'yield_rating': yieldRating,
@@ -160,7 +168,7 @@ class ApiService {
   // —— Admin ——
 
   Future<List<Map<String, dynamic>>> adminListUsers() async {
-    final res = await http.get(_uri('/api/v1/admin/users'), headers: await _headers());
+    final res = await _get('/api/v1/admin/users');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
@@ -168,21 +176,17 @@ class ApiService {
     final body = <String, dynamic>{};
     if (disabled != null) body['disabled'] = disabled;
     if (displayName != null) body['display_name'] = displayName;
-    final res = await http.patch(
-      _uri('/api/v1/admin/users/$id'),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    );
+    final res = await _patch('/api/v1/admin/users/$id', body: jsonEncode(body));
     await _handle(res);
   }
 
   Future<void> adminDeleteUser(String id) async {
-    final res = await http.delete(_uri('/api/v1/admin/users/$id'), headers: await _headers());
+    final res = await _delete('/api/v1/admin/users/$id');
     await _handle(res);
   }
 
   Future<List<Map<String, dynamic>>> adminListDatasets() async {
-    final res = await http.get(_uri('/api/v1/admin/datasets'), headers: await _headers());
+    final res = await _get('/api/v1/admin/datasets');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
@@ -199,25 +203,22 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> adminAnalytics() async {
-    final res = await http.get(_uri('/api/v1/admin/analytics'), headers: await _headers());
+    final res = await _get('/api/v1/admin/analytics');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> adminGetPrediction(String id) async {
-    final res = await http.get(_uri('/api/v1/admin/predictions/$id'), headers: await _headers());
+    final res = await _get('/api/v1/admin/predictions/$id');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<List<Map<String, dynamic>>> adminListPredictions({int limit = 15}) async {
-    final res = await http.get(
-      _uri('/api/v1/admin/predictions?limit=$limit'),
-      headers: await _headers(),
-    );
+    final res = await _get('/api/v1/admin/predictions?limit=$limit');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>> adminTrainModel() async {
-    final res = await http.post(_uri('/api/v1/admin/model/train'), headers: await _headers());
+    final res = await _post('/api/v1/admin/model/train');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
@@ -231,69 +232,53 @@ class ApiService {
     req.headers['Authorization'] = 'Bearer $token';
     req.fields['name'] = name;
     req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
-    final streamed = await req.send();
+    final streamed = await req.send().timeout(timeout);
     final res = await http.Response.fromStream(streamed);
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<void> adminActivateDataset(String id) async {
-    final res = await http.post(_uri('/api/v1/admin/datasets/$id/activate'), headers: await _headers());
+    final res = await _post('/api/v1/admin/datasets/$id/activate');
     await _handle(res);
   }
 
   Future<Map<String, dynamic>> adminGetUser(String id) async {
-    final res = await http.get(_uri('/api/v1/admin/users/$id'), headers: await _headers());
+    final res = await _get('/api/v1/admin/users/$id');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<void> adminUpdateDataset(String id, String name) async {
-    final res = await http.patch(
-      _uri('/api/v1/admin/datasets/$id'),
-      headers: await _headers(),
-      body: jsonEncode({'name': name}),
-    );
+    final res = await _patch('/api/v1/admin/datasets/$id', body: jsonEncode({'name': name}));
     await _handle(res);
   }
 
   Future<void> adminDeleteDataset(String id) async {
-    final res = await http.delete(_uri('/api/v1/admin/datasets/$id'), headers: await _headers());
+    final res = await _delete('/api/v1/admin/datasets/$id');
     await _handle(res);
   }
 
   Future<List<Map<String, dynamic>>> adminActivityLogs({int limit = 30}) async {
-    final res = await http.get(
-      _uri('/api/v1/admin/activity-logs?limit=$limit'),
-      headers: await _headers(),
-    );
+    final res = await _get('/api/v1/admin/activity-logs?limit=$limit');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
   Future<List<Map<String, dynamic>>> adminNotifications({int limit = 25}) async {
-    final res = await http.get(
-      _uri('/api/v1/admin/notifications?limit=$limit'),
-      headers: await _headers(),
-    );
+    final res = await _get('/api/v1/admin/notifications?limit=$limit');
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
   Future<void> adminMarkNotificationRead(String id) async {
-    final res = await http.patch(
-      _uri('/api/v1/admin/notifications/$id/read'),
-      headers: await _headers(),
-    );
+    final res = await _patch('/api/v1/admin/notifications/$id/read');
     await _handle(res);
   }
 
   Future<Map<String, dynamic>> adminModelReport() async {
-    final res = await http.get(_uri('/api/v1/admin/model/report'), headers: await _headers());
+    final res = await _get('/api/v1/admin/model/report');
     return (await _handle(res)) as Map<String, dynamic>;
   }
 
   Future<String> adminDownloadModelReport() async {
-    final res = await http.get(
-      _uri('/api/v1/admin/model/report/download'),
-      headers: await _headers(),
-    );
+    final res = await _get('/api/v1/admin/model/report/download');
     if (res.statusCode >= 200 && res.statusCode < 300) return res.body;
     throw ApiException(res.body, statusCode: res.statusCode);
   }

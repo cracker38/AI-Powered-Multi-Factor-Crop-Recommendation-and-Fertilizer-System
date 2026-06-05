@@ -25,6 +25,7 @@ class CropPrediction {
     this.nutrientAnalysis,
     this.weatherInsight,
     this.precisionNotes = const [],
+    this.environmentAnalysis = const [],
     this.seasonUsed = '',
     this.seasonLabel = '',
     this.improvementActions = const [],
@@ -42,6 +43,7 @@ class CropPrediction {
   final NutrientAnalysis? nutrientAnalysis;
   final WeatherInsight? weatherInsight;
   final List<String> precisionNotes;
+  final List<String> environmentAnalysis;
   final String seasonUsed;
   final String seasonLabel;
   final List<String> improvementActions;
@@ -71,6 +73,8 @@ class CropPrediction {
       nutrientAnalysis: na != null ? NutrientAnalysis.fromJson(na as Map<String, dynamic>) : null,
       weatherInsight: wi != null ? WeatherInsight.fromJson(wi as Map<String, dynamic>) : null,
       precisionNotes: (json['precision_notes'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      environmentAnalysis:
+          (json['environment_analysis'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       seasonUsed: json['season_used'] as String? ?? '',
       seasonLabel: json['season_label'] as String? ?? '',
       improvementActions:

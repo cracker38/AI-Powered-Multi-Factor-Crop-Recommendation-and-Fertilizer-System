@@ -144,6 +144,27 @@ CROP_PROFILES: dict[str, CropProfile] = {
     ),
 }
 
+# Ideal relative humidity (%) — Rwanda field conditions
+HUMIDITY_RANGES: dict[str, tuple[float, float]] = {
+    "rice": (78, 95),
+    "tea": (72, 90),
+    "coffee": (65, 82),
+    "banana": (68, 88),
+    "potato": (60, 82),
+    "cassava": (50, 75),
+    "sorghum": (45, 70),
+    "chickpea": (40, 68),
+    "grapes": (45, 72),
+    "apple": (55, 78),
+    "maize": (55, 85),
+    "beans": (50, 80),
+    "wheat": (50, 78),
+    "sweet_potato": (52, 78),
+}
+
+# Crops that fail quickly when rainfall or moisture is far below optimum
+WATER_SENSITIVE = frozenset({"rice", "tea", "banana", "potato"})
+
 
 def _range_score(value: float, low: float, high: float, margin: float = 0.15) -> float:
     """1.0 inside [low, high]; decays outside with soft margin."""
@@ -195,11 +216,14 @@ def suitability_score(
         season_s = max(season_s, 0.75)
     factors.append(("season", season_s, SEASON_LABELS.get(seas, seas)))
 
-    # Humidity proxy for disease pressure in very wet highland crops
-    if humidity_pct > 88 and crop in ("potato", "grapes", "apple"):
-        factors.append(("humidity risk", 0.6, f"high humidity {humidity_pct:.0f}% — disease risk"))
+    hum_lo, hum_hi = HUMIDITY_RANGES.get(key, (50, 85))
+    hum_s = _range_score(humidity_pct, hum_lo, hum_hi)
+    factors.append(("humidity", hum_s, f"humidity {humidity_pct:.0f}%"))
 
-    weights = [1.2, 1.3, 1.0, 1.0, 0.9, 0.9, 0.9, 1.1, 1.4]
+    if humidity_pct > 88 and crop in ("potato", "grapes", "apple"):
+        factors.append(("humidity risk", 0.55, f"very high humidity {humidity_pct:.0f}% — disease risk"))
+
+    weights = [1.3, 1.4, 1.1, 1.1, 0.85, 0.85, 0.85, 1.15, 1.45, 0.9]
     total_w = sum(weights[: len(factors)])
     score = sum(f[1] * w for f, w in zip(factors, weights)) / total_w
 
@@ -208,6 +232,49 @@ def suitability_score(
     if weak:
         notes.append("Constraints: " + "; ".join(weak[:4]))
     return round(min(1.0, max(0.0, score)), 4), notes
+
+
+def _critical_penalty(
+    crop: str,
+    *,
+    soil_ph: float,
+    rainfall_mm: float,
+    soil_moisture: float,
+    temperature_c: float,
+    profile: CropProfile,
+) -> float:
+    """Sharpen rankings when key environmental limits are violated."""
+    key = crop.lower().strip().replace(" ", "_")
+    penalty = 1.0
+
+    ph_s = _range_score(soil_ph, profile.ph_min, profile.ph_max)
+    rain_s = _range_score(rainfall_mm, profile.rainfall_min, profile.rainfall_max)
+    moist_s = _range_score(soil_moisture, profile.moisture_min, profile.moisture_max)
+    temp_s = _range_score(temperature_c, profile.temp_min, profile.temp_max)
+
+    if ph_s < 0.35:
+        penalty *= 0.55
+    if rain_s < 0.30:
+        penalty *= 0.45 if key in WATER_SENSITIVE else 0.65
+    if moist_s < 0.30:
+        penalty *= 0.50 if key in WATER_SENSITIVE else 0.70
+    if temp_s < 0.25:
+        penalty *= 0.60
+
+    return penalty
+
+
+def _blend_weights(ml_ranked: list[tuple[str, float]]) -> tuple[float, float]:
+    """Trust agronomic rules more when ML probabilities are flat or weak."""
+    if not ml_ranked:
+        return 0.25, 0.75
+    top_ml = ml_ranked[0][1]
+    spread = (ml_ranked[0][1] - ml_ranked[min(2, len(ml_ranked) - 1)][1]) if len(ml_ranked) > 1 else top_ml
+    if top_ml < 0.22 or spread < 0.08:
+        return 0.28, 0.72
+    if top_ml > 0.55 and spread > 0.18:
+        return 0.52, 0.48
+    return 0.38, 0.62
 
 
 def hybrid_rank(
@@ -223,11 +290,14 @@ def hybrid_rank(
     rainfall_mm: float,
     soil_type: str,
     season: str,
-    ml_weight: float = 0.5,
-    rule_weight: float = 0.5,
+    ml_weight: float | None = None,
+    rule_weight: float | None = None,
     top_k: int = 8,
 ) -> tuple[list[tuple[str, float]], dict[str, list[str]]]:
-    """Blend ML probabilities with agronomic suitability scores."""
+    """Blend ML probabilities with agronomic suitability scores (0–1 suitability index)."""
+    if ml_weight is None or rule_weight is None:
+        ml_weight, rule_weight = _blend_weights(ml_ranked)
+
     crops_seen: set[str] = set()
     combined: list[tuple[str, float]] = []
     factor_notes: dict[str, list[str]] = {}
@@ -247,11 +317,21 @@ def hybrid_rank(
             soil_type=soil_type,
             season=season,
         )
-        hybrid = ml_weight * ml_prob + rule_weight * rule_s
+        profile = CROP_PROFILES.get(crop.lower().strip().replace(" ", "_"))
+        penalty = 1.0
+        if profile is not None:
+            penalty = _critical_penalty(
+                crop,
+                soil_ph=soil_ph,
+                rainfall_mm=rainfall_mm,
+                soil_moisture=soil_moisture,
+                temperature_c=temperature_c,
+                profile=profile,
+            )
+        hybrid = min(1.0, (ml_weight * ml_prob + rule_weight * rule_s) * penalty)
         combined.append((crop, hybrid))
         factor_notes[crop] = notes
 
-    # Boost rule-strong crops missing from ML top list
     for key, profile in CROP_PROFILES.items():
         if key in crops_seen:
             continue
@@ -268,12 +348,18 @@ def hybrid_rank(
             soil_type=soil_type,
             season=season,
         )
-        if rule_s >= 0.72:
-            combined.append((profile.name, rule_weight * rule_s * 0.85))
+        if rule_s >= 0.68:
+            penalty = _critical_penalty(
+                profile.name,
+                soil_ph=soil_ph,
+                rainfall_mm=rainfall_mm,
+                soil_moisture=soil_moisture,
+                temperature_c=temperature_c,
+                profile=profile,
+            )
+            combined.append((profile.name, min(1.0, rule_s * penalty * 0.92)))
             factor_notes[profile.name] = notes
 
     combined.sort(key=lambda x: x[1], reverse=True)
-    slice_ = combined[:top_k]
-    total = sum(s for _, s in slice_) or 1.0
-    top = [(c, round(s / total, 6)) for c, s in slice_]
+    top = [(c, round(s, 4)) for c, s in combined[:top_k]]
     return top, factor_notes

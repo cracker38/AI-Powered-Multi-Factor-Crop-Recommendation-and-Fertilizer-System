@@ -8,20 +8,21 @@ import 'firestore_service.dart';
 
 /// Loads the signed-in user's profile from the API, with Firestore fallback.
 class SessionBootstrap {
-  static const Duration apiTimeout = Duration(seconds: 15);
+  static const Duration apiTimeout = Duration(seconds: 12);
 
   static Future<UserProfile> loadProfile(ApiService api) async {
     try {
       return await api.syncProfile().timeout(apiTimeout);
     } on TimeoutException {
       return _firestoreFallback(
-        'The server took too long. Loading your profile from Firebase…',
+        'The server took too long.',
       );
     } on ApiException catch (e) {
       if (e.statusCode == 503 ||
           e.statusCode == 403 ||
           e.statusCode == 404 ||
-          e.message.toLowerCase().contains('firestore')) {
+          e.message.toLowerCase().contains('firestore') ||
+          e.message.toLowerCase().contains('timed out')) {
         return _firestoreFallback(e.message);
       }
       rethrow;
@@ -29,14 +30,19 @@ class SessionBootstrap {
   }
 
   static Future<UserProfile> _firestoreFallback(String hint) async {
-    final profile = await FirestoreService().fetchCurrentUserProfile();
-    if (profile != null) {
-      if (!profile.disabled) return profile;
-      throw ApiException('Account disabled');
+    try {
+      final profile = await FirestoreService()
+          .fetchCurrentUserProfile()
+          .timeout(const Duration(seconds: 10));
+      if (profile != null) {
+        if (!profile.disabled) return profile;
+        throw ApiException('Account disabled');
+      }
+    } on TimeoutException {
+      // Fall through to error below.
     }
     throw ApiException(
-      '$hint If you are admin, add users/{uid} in Firestore or fix '
-      'backend/firebase-service-account.json and run seed_admin.py.',
+      '$hint Sign in again after the API is running, or complete registration in Firebase.',
     );
   }
 

@@ -25,6 +25,8 @@ from app.schemas import (
     PredictionHistoryItem,
     WeatherInsight,
 )
+from app.firestore_timeout import run_firestore
+
 from app.weather_service import weather_insight as build_weather_insight
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
@@ -45,7 +47,7 @@ def _build_evaluation(
         payload.soil_ph,
         payload.soil_moisture,
     )
-    fert_raw, analysis, notes = recommend_fertilizers(
+    fert_raw, analysis, fert_notes = recommend_fertilizers(
         crop=top_crop,
         nitrogen=payload.nitrogen,
         phosphorus=payload.phosphorus,
@@ -56,6 +58,12 @@ def _build_evaluation(
         season=payload.season,
         district=district,
     )
+    adss_notes = list(ml_info.get("precision_notes_adss") or [])
+    if ml_info.get("fertilizer_applicable", True):
+        notes = adss_notes + fert_notes
+    else:
+        notes = adss_notes
+    environment_analysis = list(ml_info.get("environment_analysis") or [])
     weather_raw = build_weather_insight(
         season=payload.season,
         district=district,
@@ -63,7 +71,11 @@ def _build_evaluation(
         temperature_c=payload.temperature_c,
         humidity_pct=payload.humidity_pct,
     )
-    fertilizers = [FertilizerRecommendationItem(**f) for f in fert_raw]
+    fertilizers = (
+        [FertilizerRecommendationItem(**f) for f in fert_raw]
+        if ml_info.get("fertilizer_applicable", True)
+        else []
+    )
     confidence = round(ranked[0][1], 6)
     improvements = build_improvement_actions(
         confidence,
@@ -93,6 +105,7 @@ def _build_evaluation(
         nutrient_analysis=NutrientAnalysis(**analysis),
         weather_insight=_parse_weather(weather_raw),
         precision_notes=notes,
+        environment_analysis=environment_analysis,
         season_used=season_id,
         season_label=season_label(season_id),
         improvement_actions=improvements,
@@ -154,6 +167,7 @@ def evaluate(
                 "nutrient_analysis": result.nutrient_analysis.model_dump() if result.nutrient_analysis else None,
                 "weather_insight": result.weather_insight.model_dump() if result.weather_insight else None,
                 "precision_notes": result.precision_notes,
+                "environment_analysis": result.environment_analysis,
                 "season_used": result.season_used,
                 "improvement_actions": result.improvement_actions,
             },
@@ -246,6 +260,7 @@ def history_detail(prediction_id: str, user: UserRecord = Depends(require_farmer
         nutrient_analysis=NutrientAnalysis(**na) if na else None,
         weather_insight=_parse_weather(wi),
         precision_notes=list(row.get("precision_notes") or []),
+        environment_analysis=list(row.get("environment_analysis") or []),
         full_ranking=ranking,
         has_feedback=fb is not None,
         feedback_rating=int(fb.get("yield_rating")) if fb else None,

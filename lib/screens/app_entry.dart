@@ -67,8 +67,17 @@ class _AppEntryState extends State<AppEntry> {
     try {
       final base = await _auth.readApiBase();
       final api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
-      final profile = await SessionBootstrap.loadProfile(api);
-      await FirestoreService().syncCurrentAuthUser(profile);
+      UserProfile profile;
+      try {
+        profile = await SessionBootstrap.loadProfile(api);
+      } on ApiException {
+        final cached = await FirestoreService().fetchCurrentUserProfile();
+        if (cached == null || cached.disabled) rethrow;
+        profile = cached;
+      }
+      try {
+        await FirestoreService().syncCurrentAuthUser(profile);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _profile = profile;
@@ -76,7 +85,6 @@ class _AppEntryState extends State<AppEntry> {
         _loading = false;
       });
     } on ApiException catch (e) {
-      await _auth.signOut();
       if (!mounted) return;
       setState(() {
         _profile = null;
@@ -84,7 +92,19 @@ class _AppEntryState extends State<AppEntry> {
         _loading = false;
         _bootstrapError = e.message;
       });
+      await _auth.signOut();
     } catch (e) {
+      final cached = await FirestoreService().fetchCurrentUserProfile();
+      if (cached != null && !cached.disabled && mounted) {
+        final base = await _auth.readApiBase();
+        setState(() {
+          _profile = cached;
+          _api = ApiService(baseUrl: base, getToken: _auth.getIdToken);
+          _loading = false;
+          _bootstrapError = null;
+        });
+        return;
+      }
       await _auth.signOut();
       if (!mounted) return;
       setState(() {

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/farmer_tip.dart';
 import '../models/prediction_history_item.dart';
 import 'api_service.dart';
+import 'firestore_service.dart';
 
 class FarmerController extends ChangeNotifier {
   FarmerController(this.api);
@@ -43,14 +46,44 @@ class FarmerController extends ChangeNotifier {
 
     try {
       apiOnline = await api.healthCheck();
-      final items = await api.fetchHistory(limit: 50);
-      final tipsJson = await api.fetchFarmerTips();
-      history = items;
-      tips = tipsJson.map(FarmerTip.fromJson).toList();
-      error = null;
-      lastLoadedAt = DateTime.now();
+      try {
+        final items = await api.fetchHistory(limit: 50);
+        history = items;
+        final tipsJson = await api.fetchFarmerTips();
+        tips = tipsJson.map(FarmerTip.fromJson).toList();
+        error = null;
+        lastLoadedAt = DateTime.now();
+      } on ApiException catch (e) {
+        if (apiOnline) {
+          final fallback = await FirestoreService().fetchMyPredictionHistory(limit: 50);
+          if (fallback.isNotEmpty) {
+            history = fallback;
+            error = 'Loaded from Firebase (API: ${e.message})';
+            lastLoadedAt = DateTime.now();
+          } else {
+            error = e.message;
+          }
+        } else {
+          error = 'Cannot reach API on port 8000. Run scripts/start-api.ps1 then Retry.';
+        }
+      }
     } on ApiException catch (e) {
       error = e.message;
+      apiOnline = false;
+    } on TimeoutException {
+      apiOnline = await api.healthCheck();
+      if (apiOnline) {
+        final fallback = await FirestoreService().fetchMyPredictionHistory(limit: 50);
+        history = fallback;
+        error = fallback.isEmpty
+            ? 'API is slow. Pull to refresh or try again.'
+            : 'Loaded from Firebase while API was slow.';
+        lastLoadedAt = DateTime.now();
+      } else {
+        error = 'Cannot reach API on port 8000. Run scripts/start-api.ps1 then Retry.';
+      }
+    } catch (e) {
+      error = e.toString();
       apiOnline = false;
     } finally {
       loading = false;

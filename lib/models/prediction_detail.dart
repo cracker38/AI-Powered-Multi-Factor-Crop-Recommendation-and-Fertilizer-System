@@ -27,6 +27,7 @@ class PredictionDetail {
     this.nutrientAnalysis,
     this.weatherInsight,
     this.precisionNotes = const [],
+    this.environmentAnalysis = const [],
     this.hasFeedback = false,
     this.feedbackRating,
     this.seasonLabel = '',
@@ -56,6 +57,7 @@ class PredictionDetail {
   final NutrientAnalysis? nutrientAnalysis;
   final WeatherInsight? weatherInsight;
   final List<String> precisionNotes;
+  final List<String> environmentAnalysis;
   final List<CropRank> fullRanking;
   final bool hasFeedback;
   final int? feedbackRating;
@@ -98,6 +100,8 @@ class PredictionDetail {
       nutrientAnalysis: na != null ? NutrientAnalysis.fromJson(na as Map<String, dynamic>) : null,
       weatherInsight: wi != null ? WeatherInsight.fromJson(wi as Map<String, dynamic>) : null,
       precisionNotes: (json['precision_notes'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      environmentAnalysis:
+          (json['environment_analysis'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       fullRanking: ranking,
       hasFeedback: json['has_feedback'] as bool? ?? false,
       feedbackRating: json['feedback_rating'] as int?,
