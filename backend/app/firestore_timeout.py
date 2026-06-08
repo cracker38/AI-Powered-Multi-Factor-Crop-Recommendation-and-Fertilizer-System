@@ -6,12 +6,16 @@ from typing import TypeVar
 
 from fastapi import HTTPException
 
+from app.config import settings
+
 T = TypeVar("T")
 
 _DEFAULT_TIMEOUT_SEC = 10.0
 
 
 def run_firestore(label: str, fn, *args, timeout_sec: float = _DEFAULT_TIMEOUT_SEC, **kwargs) -> T:
+    if settings.storage_backend == "sqlite":
+        return fn(*args, **kwargs)
     with ThreadPoolExecutor(max_workers=1) as pool:
         fut = pool.submit(fn, *args, **kwargs)
         try:

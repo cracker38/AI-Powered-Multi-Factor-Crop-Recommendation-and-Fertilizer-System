@@ -8,7 +8,7 @@ import 'firestore_service.dart';
 
 /// Loads the signed-in user's profile from the API, with Firestore fallback.
 class SessionBootstrap {
-  static const Duration apiTimeout = Duration(seconds: 12);
+  static const Duration apiTimeout = Duration(seconds: 20);
 
   static Future<UserProfile> loadProfile(ApiService api) async {
     try {

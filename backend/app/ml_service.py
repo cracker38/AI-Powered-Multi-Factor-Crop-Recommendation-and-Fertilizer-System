@@ -27,12 +27,26 @@ def _load_meta() -> dict:
     return {}
 
 
+_pipeline_cache = None
+
+
 def load_pipeline():
+    global _pipeline_cache
+    if _pipeline_cache is not None:
+        return _pipeline_cache
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
             f"Trained model not found at {MODEL_PATH}. Run: python ml/train.py"
         )
-    return joblib.load(MODEL_PATH)
+    _pipeline_cache = joblib.load(MODEL_PATH)
+    return _pipeline_cache
+
+
+def warmup_pipeline() -> str:
+    """Load ML model once at API startup so first /evaluate is fast."""
+    pipe = load_pipeline()
+    meta = _load_meta()
+    return str(meta.get("best_model", type(pipe.named_steps.get("clf")).__name__))
 
 
 def build_explanation(

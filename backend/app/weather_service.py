@@ -68,7 +68,7 @@ def fetch_live_forecast(district: str | None) -> dict[str, Any]:
             "forecast_days": 7,
             "timezone": "Africa/Kigali",
         }
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(url, params=params, timeout=4)
         r.raise_for_status()
         data = r.json()
         current = data.get("current") or {}

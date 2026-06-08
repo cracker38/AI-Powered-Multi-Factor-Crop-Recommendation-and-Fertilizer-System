@@ -25,8 +25,6 @@ from app.schemas import (
     PredictionHistoryItem,
     WeatherInsight,
 )
-from app.firestore_timeout import run_firestore
-
 from app.weather_service import weather_insight as build_weather_insight
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])

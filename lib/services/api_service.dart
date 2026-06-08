@@ -17,7 +17,7 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  ApiService({required this.baseUrl, required this.getToken, this.timeout = const Duration(seconds: 15)});
+  ApiService({required this.baseUrl, required this.getToken, this.timeout = const Duration(seconds: 25)});
 
   final String baseUrl;
   final Future<String?> Function() getToken;
@@ -41,7 +41,7 @@ class ApiService {
       return await request.timeout(timeout);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. The API may be running but the database is slow — wait and tap Retry, or restart scripts/start-api.ps1.',
+        'Request timed out. The API may be running but is slow — wait and tap Retry, or restart scripts/start-api.ps1.',
         statusCode: 503,
       );
     }
@@ -114,8 +114,17 @@ class ApiService {
   }
 
   Future<CropPrediction> evaluate(FarmInput input) async {
-    final res = await _post('/api/v1/predictions/evaluate', body: jsonEncode(input.toJson()));
-    return CropPrediction.fromJson((await _handle(res)) as Map<String, dynamic>);
+    try {
+      final res = await http
+          .post(_uri('/api/v1/predictions/evaluate'), headers: await _headers(), body: jsonEncode(input.toJson()))
+          .timeout(const Duration(seconds: 45));
+      return CropPrediction.fromJson((await _handle(res)) as Map<String, dynamic>);
+    } on TimeoutException {
+      throw ApiException(
+        'Crop analysis timed out. Restart scripts/start-api.ps1, wait for "Application startup complete", then Retry.',
+        statusCode: 503,
+      );
+    }
   }
 
   Future<List<PredictionHistoryItem>> fetchHistory({int limit = 30}) async {
