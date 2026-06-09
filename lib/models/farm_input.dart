@@ -13,6 +13,7 @@ class FarmInput {
     this.district,
     this.persist = true,
     this.seasonAuto = true,
+    this.useLiveClimate = true,
   });
 
   final double nitrogen;
@@ -29,6 +30,7 @@ class FarmInput {
   final String? district;
   final bool persist;
   final bool seasonAuto;
+  final bool useLiveClimate;
 
   Map<String, dynamic> toJson() => {
         'nitrogen': nitrogen,
@@ -43,5 +45,6 @@ class FarmInput {
         if (!seasonAuto && season.isNotEmpty) 'season': season,
         if (district != null && district!.isNotEmpty) 'district': district,
         'persist': persist,
+        'use_live_climate': useLiveClimate,
       };
 }

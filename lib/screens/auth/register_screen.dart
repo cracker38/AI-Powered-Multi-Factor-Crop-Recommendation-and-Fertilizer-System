@@ -28,8 +28,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _confirm = TextEditingController();
   final _phone = TextEditingController();
+  final _farmSize = TextEditingController();
+  final _confirm = TextEditingController();
   final _auth = AuthService();
   String? _district;
   bool _busy = false;
@@ -42,6 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _password.dispose();
     _confirm.dispose();
     _phone.dispose();
+    _farmSize.dispose();
     super.dispose();
   }
 
@@ -51,6 +53,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
     if (!_formKey.currentState!.validate()) return;
+    final farmSize = double.tryParse(_farmSize.text.replaceAll(',', '.'));
+    if (farmSize == null || farmSize <= 0) {
+      setState(() => _error = 'Enter a valid farm size in hectares');
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -72,6 +79,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         disabled: false,
         phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         district: _district != null && _district!.isNotEmpty ? _district : null,
+        farmSizeHa: farmSize,
+        approvalStatus: 'pending',
       );
 
       // Save to Firestore first so registration works even if the API/Firestore Admin SDK is slow.
@@ -84,6 +93,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final synced = await api
             .registerFarmer(
               displayName: profile.displayName ?? _name.text.trim(),
+              farmSizeHa: farmSize,
               phone: profile.phone,
               district: profile.district,
             )
@@ -109,8 +119,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Account created. The server was slow — your profile was saved in Firebase. '
-                'Start the API on port 8000 for full features.',
+                'Account created — pending admin approval. Submit your field data after sign-in. '
+                'Start the API on port 8000 for full sync.',
+              ),
+              duration: Duration(seconds: 6),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Registration submitted. An administrator must approve your account before you can analyze crops.',
               ),
               duration: Duration(seconds: 5),
             ),
@@ -225,6 +244,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                       _DistrictField(
                                         value: _district,
                                         onChanged: (v) => setState(() => _district = v),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      AuthTextField(
+                                        controller: _farmSize,
+                                        label: 'Farm size (hectares)',
+                                        hint: 'e.g. 2.5',
+                                        icon: Icons.landscape_outlined,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textInputAction: TextInputAction.next,
+                                        validator: (v) {
+                                          final n = double.tryParse((v ?? '').replaceAll(',', '.'));
+                                          if (n == null || n <= 0) return 'Enter farm size in hectares';
+                                          if (n > 10000) return 'Enter a realistic farm size';
+                                          return null;
+                                        },
                                       ),
                                       const SizedBox(height: 18),
                                       AuthTextField(

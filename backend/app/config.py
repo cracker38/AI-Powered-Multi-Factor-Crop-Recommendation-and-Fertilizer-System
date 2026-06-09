@@ -20,6 +20,19 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./crops_recommendation.db"
     # Use sqlite when Firestore gRPC hangs (common on Windows). Set firestore for cloud-only deploy.
     storage_backend: str = "sqlite"
+    openweather_api_key: str = ""
+
+    @property
+    def openweather_api_key_resolved(self) -> str:
+        raw = (self.openweather_api_key or "").strip()
+        if raw.startswith("b64:"):
+            import base64
+
+            try:
+                return base64.b64decode(raw[4:]).decode("utf-8").strip()
+            except Exception:
+                return ""
+        return raw
 
     @property
     def admin_email_normalized(self) -> str:

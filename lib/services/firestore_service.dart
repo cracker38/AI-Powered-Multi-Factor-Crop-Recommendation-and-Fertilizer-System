@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/farmer_field_data.dart';
 import '../models/crop_prediction.dart';
-import '../models/farm_input.dart';
 import '../models/prediction_history_item.dart';
 import '../models/user_profile.dart';
 
@@ -22,8 +22,11 @@ class FirestoreService {
         'display_name': profile.displayName,
         'role': profile.role,
         'disabled': profile.disabled,
+        'approval_status': profile.approvalStatus,
         if (profile.phone != null) 'phone': profile.phone,
         if (profile.district != null) 'district': profile.district,
+        if (profile.farmSizeHa != null) 'farm_size_ha': profile.farmSizeHa,
+        if (profile.fieldData != null) 'field_data': profile.fieldData!.toJson(),
         'updated_at': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
@@ -59,6 +62,9 @@ class FirestoreService {
       disabled: data['disabled'] as bool? ?? false,
       phone: data['phone'] as String?,
       district: data['district'] as String?,
+      farmSizeHa: (data['farm_size_ha'] as num?)?.toDouble(),
+      approvalStatus: data['approval_status'] as String? ?? 'approved',
+      fieldData: FarmerFieldData.tryParse(data['field_data']),
     );
   }
 

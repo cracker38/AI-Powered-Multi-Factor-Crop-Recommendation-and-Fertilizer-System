@@ -11,6 +11,7 @@ class FarmerInputField extends StatelessWidget {
     required this.min,
     required this.max,
     this.hint,
+    this.readOnly = false,
   });
 
   final String label;
@@ -19,6 +20,7 @@ class FarmerInputField extends StatelessWidget {
   final double min;
   final double max;
   final String? hint;
+  final bool readOnly;
 
   String? _validate(String? s) {
     if (s == null || s.trim().isEmpty) return 'Required';
@@ -32,12 +34,15 @@ class FarmerInputField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      readOnly: readOnly,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: (v) => _validate(v),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         prefixIcon: Icon(icon, color: AppColors.primary, size: 22),
+        filled: readOnly,
+        fillColor: readOnly ? AppColors.primary.withValues(alpha: 0.04) : null,
       ),
     );
   }

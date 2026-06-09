@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/farmer_field_data.dart';
+import '../models/live_climate.dart';
 import '../models/crop_prediction.dart';
 import '../models/farm_input.dart';
 import '../models/prediction_history_item.dart';
@@ -81,16 +83,28 @@ class ApiService {
 
   Future<UserProfile> registerFarmer({
     required String displayName,
+    required double farmSizeHa,
     String? phone,
     String? district,
+    FarmerFieldData? fieldData,
   }) async {
     final res = await _post(
       '/api/v1/auth/register-farmer',
       body: jsonEncode({
         'display_name': displayName,
+        'farm_size_ha': farmSizeHa,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (district != null && district.isNotEmpty) 'district': district,
+        if (fieldData != null) 'field_data': fieldData.toJson(),
       }),
+    );
+    return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> submitFieldData(FarmerFieldData fieldData) async {
+    final res = await _post(
+      '/api/v1/auth/field-data',
+      body: jsonEncode({'field_data': fieldData.toJson()}),
     );
     return UserProfile.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
@@ -143,6 +157,12 @@ class ApiService {
     return ((await _handle(res)) as List<dynamic>).cast<Map<String, dynamic>>();
   }
 
+  Future<LiveClimate> fetchLiveClimate({String? district}) async {
+    final q = district != null && district.isNotEmpty ? '?district=${Uri.encodeComponent(district)}' : '';
+    final res = await _get('/api/v1/farmer/live-climate$q');
+    return LiveClimate.fromJson((await _handle(res)) as Map<String, dynamic>);
+  }
+
   Future<Map<String, dynamic>?> fetchOutcomeFeedback(String predictionId) async {
     final res = await _timed(http.get(
       _uri('/api/v1/farmer/feedback/$predictionId'),
@@ -186,6 +206,34 @@ class ApiService {
     if (disabled != null) body['disabled'] = disabled;
     if (displayName != null) body['display_name'] = displayName;
     final res = await _patch('/api/v1/admin/users/$id', body: jsonEncode(body));
+    await _handle(res);
+  }
+
+  Future<Map<String, dynamic>> adminApproveFarmer({
+    required String id,
+    required String displayName,
+    required double farmSizeHa,
+    required FarmerFieldData fieldData,
+    String? phone,
+    String? district,
+    String? adminNotes,
+  }) async {
+    final res = await _post(
+      '/api/v1/admin/users/$id/approve',
+      body: jsonEncode({
+        'display_name': displayName,
+        'farm_size_ha': farmSizeHa,
+        'field_data': fieldData.toJson(),
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+        if (district != null && district.isNotEmpty) 'district': district,
+        if (adminNotes != null && adminNotes.isNotEmpty) 'admin_notes': adminNotes,
+      }),
+    );
+    return (await _handle(res)) as Map<String, dynamic>;
+  }
+
+  Future<void> adminRejectFarmer(String id) async {
+    final res = await _post('/api/v1/admin/users/$id/reject');
     await _handle(res);
   }
 

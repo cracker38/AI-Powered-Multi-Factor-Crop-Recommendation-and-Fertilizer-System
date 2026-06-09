@@ -3,6 +3,18 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class FarmerFieldData(BaseModel):
+    nitrogen: float = Field(ge=0, le=500)
+    phosphorus: float = Field(ge=0, le=500)
+    potassium: float = Field(ge=0, le=500)
+    soil_moisture: float = Field(ge=0, le=100)
+    temperature_c: float = Field(ge=-10, le=55)
+    humidity_pct: float = Field(ge=0, le=100)
+    soil_ph: float = Field(ge=0, le=14)
+    rainfall_mm: float = Field(ge=0, le=2000)
+    soil_type: str = Field(default="loam", max_length=40)
+
+
 class UserProfile(BaseModel):
     id: str
     email: str
@@ -11,12 +23,30 @@ class UserProfile(BaseModel):
     disabled: bool
     phone: str | None = None
     district: str | None = None
+    farm_size_ha: float | None = None
+    approval_status: str = "approved"
+    field_data: FarmerFieldData | None = None
 
 
 class RegisterFarmerRequest(BaseModel):
     display_name: str = Field(min_length=2, max_length=120)
     phone: str | None = Field(default=None, max_length=20)
     district: str | None = Field(default=None, max_length=80)
+    farm_size_ha: float = Field(ge=0.01, le=10000, description="Farm size in hectares")
+    field_data: FarmerFieldData | None = None
+
+
+class SubmitFarmerFieldDataRequest(BaseModel):
+    field_data: FarmerFieldData
+
+
+class AdminApproveFarmerRequest(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+    phone: str | None = Field(default=None, max_length=20)
+    district: str | None = Field(default=None, max_length=80)
+    farm_size_ha: float = Field(ge=0.01, le=10000)
+    field_data: FarmerFieldData
+    admin_notes: str | None = Field(default=None, max_length=500)
 
 
 class UpdateFarmerProfileRequest(BaseModel):
@@ -45,6 +75,10 @@ class FarmConditionsRequest(BaseModel):
     season: str | None = Field(default=None, max_length=40, description="Auto-detected from date if omitted")
     district: str | None = Field(default=None, max_length=80)
     persist: bool = True
+    use_live_climate: bool = Field(
+        default=True,
+        description="When true, temperature, humidity, and rainfall are loaded from live weather APIs for the district.",
+    )
 
 
 class FertilizerRecommendationItem(BaseModel):
@@ -72,6 +106,21 @@ class ForecastDayItem(BaseModel):
     precipitation_mm: float = 0
     temp_max_c: float | None = None
     temp_min_c: float | None = None
+
+
+class LiveClimateResponse(BaseModel):
+    available: bool
+    temperature_c: float | None = None
+    humidity_pct: float | None = None
+    rainfall_mm: float | None = None
+    district: str = "Kigali"
+    source: str = ""
+    provider_url: str = ""
+    secondary_source: str = ""
+    fetched_at: str | None = None
+    note: str = ""
+    reason: str = ""
+    forecast_daily: list[ForecastDayItem] = []
 
 
 class WeatherInsight(BaseModel):
@@ -187,6 +236,9 @@ class AdminUserItem(BaseModel):
     prediction_count: int = 0
     phone: str | None = None
     district: str | None = None
+    farm_size_ha: float | None = None
+    approval_status: str = "approved"
+    field_data: FarmerFieldData | None = None
 
 
 class AdminUserUpdate(BaseModel):

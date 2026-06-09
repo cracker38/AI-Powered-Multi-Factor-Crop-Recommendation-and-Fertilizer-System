@@ -5,9 +5,10 @@ import '../../core/app_colors.dart';
 import '../../models/admin_user.dart';
 import '../../services/api_service.dart';
 import '../../utils/admin_csv_export.dart';
+import '../../widgets/admin/admin_farmer_approve_sheet.dart';
 import '../../widgets/admin/admin_shared.dart';
 
-enum _FarmerFilter { all, active, disabled }
+enum _FarmerFilter { all, pending, active, disabled }
 
 class AdminFarmersPage extends StatefulWidget {
   const AdminFarmersPage({super.key, required this.api});
@@ -53,10 +54,12 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
   List<AdminUser> get _visible {
     var list = _all.where((u) => u.isFarmer).toList();
     switch (_filter) {
+      case _FarmerFilter.pending:
+        list = list.where((u) => u.isPending).toList();
       case _FarmerFilter.active:
-        list = list.where((u) => !u.disabled).toList();
+        list = list.where((u) => u.isApproved && !u.disabled).toList();
       case _FarmerFilter.disabled:
-        list = list.where((u) => u.disabled).toList();
+        list = list.where((u) => u.disabled && !u.isPending).toList();
       case _FarmerFilter.all:
         break;
     }
@@ -76,6 +79,45 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
   }
 
   int get _farmerCount => _all.where((u) => u.isFarmer).length;
+
+  int get _pendingCount => _all.where((u) => u.isPending).length;
+
+  Future<void> _approve(AdminUser user) async {
+    final ok = await showAdminFarmerApproveSheet(context, api: widget.api, user: user);
+    if (ok == true) {
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${user.displayName ?? user.email} is now active')),
+        );
+      }
+    }
+  }
+
+  Future<void> _reject(AdminUser user) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Reject registration?'),
+        content: Text('Decline ${user.email}? They will not be able to use crop analysis.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorText),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.api.adminRejectFarmer(user.id);
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
 
   Future<void> _editName(AdminUser user) async {
     final ctrl = TextEditingController(text: user.displayName ?? '');
@@ -161,12 +203,41 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
             _detailRow('Full name', user.displayName ?? '—'),
             _detailRow('Phone', user.phone ?? '—'),
             _detailRow('District', user.district ?? '—'),
+            _detailRow('Farm size', user.farmSizeHa != null ? '${user.farmSizeHa!.toStringAsFixed(2)} ha' : '—'),
+            _detailRow('Approval', user.approvalStatus),
+            if (user.fieldData != null) ...[
+              const SizedBox(height: 8),
+              const Text('Field data (submitted)', style: TextStyle(fontWeight: FontWeight.w800)),
+              _detailRow('N-P-K', '${user.fieldData!.nitrogen}/${user.fieldData!.phosphorus}/${user.fieldData!.potassium} kg/ha'),
+              _detailRow('pH / moisture', '${user.fieldData!.soilPh} · ${user.fieldData!.soilMoisture}%'),
+              _detailRow('Rain / temp', '${user.fieldData!.rainfallMm} mm · ${user.fieldData!.temperatureC} °C'),
+              _detailRow('Soil type', user.fieldData!.soilType),
+            ],
             _detailRow(
               'Registered',
               user.createdAt != null ? DateFormat.yMMMd().format(user.createdAt!) : '—',
             ),
             _detailRow('Evaluations', '${user.predictionCount}'),
-            _detailRow('Status', user.disabled ? 'Disabled' : 'Active'),
+            _detailRow('Status', user.isPending ? 'Pending approval' : (user.disabled ? 'Disabled' : 'Active')),
+            if (user.isPending) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(c);
+                  _approve(user);
+                },
+                icon: const Icon(Icons.check_circle_rounded),
+                label: const Text('Review & approve'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(c);
+                  _reject(user);
+                },
+                child: const Text('Reject'),
+              ),
+            ] else ...[
             const SizedBox(height: 16),
             Row(
               children: [
@@ -191,6 +262,7 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
                 ),
               ],
             ),
+            ],
           ],
         ),
       ),
@@ -305,7 +377,7 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
   Widget _buildHeader(BuildContext context) {
     return AdminPageHeader(
       title: 'Farmer accounts',
-      subtitle: '$_farmerCount registered · Rwanda crop & fertilizer platform',
+      subtitle: '$_farmerCount registered · $_pendingCount pending approval',
       trailing: IconButton(
         onPressed: _loading || _all.isEmpty ? null : _exportFarmers,
         icon: const Icon(Icons.download_rounded, color: Colors.white),
@@ -330,6 +402,8 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
             child: Row(
               children: [
                 _filterChip('All', _FarmerFilter.all),
+                const SizedBox(width: 8),
+                _filterChip('Pending', _FarmerFilter.pending),
                 const SizedBox(width: 8),
                 _filterChip('Active', _FarmerFilter.active),
                 const SizedBox(width: 8),
@@ -369,7 +443,11 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: user.disabled ? Colors.orange.shade200 : Colors.grey.shade200,
+          color: user.isPending
+              ? Colors.amber.shade400
+              : user.disabled
+                  ? Colors.orange.shade200
+                  : Colors.grey.shade200,
         ),
         boxShadow: [
           BoxShadow(
@@ -410,11 +488,22 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
               '${user.predictionCount} recommendations',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
             ),
-            if (user.disabled)
+            if (user.isPending)
+              const Text('Pending approval', style: TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w600))
+            else if (user.disabled)
               const Text('Account disabled', style: TextStyle(color: Colors.orange, fontSize: 12)),
           ],
         ),
-        trailing: PopupMenuButton<String>(
+        trailing: user.isPending
+            ? FilledButton(
+                onPressed: () => _approve(user),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                child: const Text('Approve'),
+              )
+            : PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert_rounded),
           onSelected: (v) {
             switch (v) {

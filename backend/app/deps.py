@@ -40,3 +40,12 @@ def require_farmer(user: UserRecord = Depends(get_current_user)) -> UserRecord:
     if user.role != "farmer":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Farmer access required")
     return user
+
+
+def require_approved_farmer(user: UserRecord = Depends(require_farmer)) -> UserRecord:
+    if not user.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is pending admin approval. Submit your farm field data and wait for activation.",
+        )
+    return user

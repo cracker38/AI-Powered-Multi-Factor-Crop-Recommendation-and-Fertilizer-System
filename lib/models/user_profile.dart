@@ -1,3 +1,5 @@
+import 'farmer_field_data.dart';
+
 class UserProfile {
   const UserProfile({
     required this.id,
@@ -7,6 +9,9 @@ class UserProfile {
     required this.disabled,
     this.phone,
     this.district,
+    this.farmSizeHa,
+    this.approvalStatus = 'approved',
+    this.fieldData,
   });
 
   final String id;
@@ -16,9 +21,15 @@ class UserProfile {
   final bool disabled;
   final String? phone;
   final String? district;
+  final double? farmSizeHa;
+  final String approvalStatus;
+  final FarmerFieldData? fieldData;
 
   bool get isAdmin => role == 'admin';
   bool get isFarmer => role == 'farmer';
+  bool get isApproved => isAdmin || approvalStatus == 'approved';
+  bool get isPending => isFarmer && approvalStatus == 'pending';
+  bool get isRejected => approvalStatus == 'rejected';
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
@@ -29,6 +40,9 @@ class UserProfile {
       disabled: json['disabled'] as bool? ?? false,
       phone: json['phone'] as String?,
       district: json['district'] as String?,
+      farmSizeHa: (json['farm_size_ha'] as num?)?.toDouble(),
+      approvalStatus: json['approval_status'] as String? ?? 'approved',
+      fieldData: FarmerFieldData.tryParse(json['field_data']),
     );
   }
 }

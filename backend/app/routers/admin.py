@@ -46,6 +46,7 @@ from app.firestore_db import (
 from app.ml_service import META_PATH, MODEL_PATH, _load_meta
 from app.schemas import (
     ActivityLogItem,
+    AdminApproveFarmerRequest,
     AdminPredictionItem,
     AdminUserItem,
     AdminUserUpdate,
@@ -56,6 +57,8 @@ from app.schemas import (
     NotificationItem,
     TrainModelResponse,
 )
+from app.user_profile_utils import user_to_profile
+from app.weather_service import apply_live_climate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -89,6 +92,7 @@ def _model_metrics(meta: dict | None) -> tuple[float | None, float | None, float
 
 def _user_item(user: UserRecord, pred_counts: dict[str, int] | None = None) -> AdminUserItem:
     counts = pred_counts or {}
+    profile = user_to_profile(user)
     return AdminUserItem(
         id=user.uid,
         email=user.email,
@@ -99,6 +103,9 @@ def _user_item(user: UserRecord, pred_counts: dict[str, int] | None = None) -> A
         prediction_count=counts.get(user.uid, prediction_count_for_user(user.uid)),
         phone=user.phone,
         district=user.district,
+        farm_size_ha=user.farm_size_ha,
+        approval_status=profile.approval_status,
+        field_data=profile.field_data,
     )
 
 
@@ -167,6 +174,73 @@ def get_user_route(user_id: str, _: UserRecord = Depends(require_admin)):
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return _user_item(user)
+
+
+@router.post("/users/{user_id}/approve", response_model=AdminUserItem)
+def approve_farmer_route(
+    user_id: str,
+    body: AdminApproveFarmerRequest,
+    admin: UserRecord = Depends(require_admin),
+):
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != "farmer":
+        raise HTTPException(status_code=400, detail="Only farmer accounts can be approved")
+    if user.approval_status == "approved":
+        raise HTTPException(status_code=400, detail="Farmer already approved")
+
+    fd = body.field_data
+    temp, hum, rain, _ = apply_live_climate(
+        district=body.district or user.district,
+        temperature_c=fd.temperature_c,
+        humidity_pct=fd.humidity_pct,
+        rainfall_mm=fd.rainfall_mm,
+    )
+    field_data = fd.model_copy(
+        update={"temperature_c": temp, "humidity_pct": hum, "rainfall_mm": rain}
+    ).model_dump()
+
+    updated = update_user(
+        user_id,
+        display_name=body.display_name,
+        phone=body.phone,
+        district=body.district,
+        farm_size_ha=body.farm_size_ha,
+        field_data=field_data,
+        approval_status="approved",
+        disabled=False,
+    )
+    create_notification(
+        title="Farmer account approved",
+        message=f"{body.display_name} ({user.email}) was approved and can now run crop analyses.",
+        category="user",
+        severity="info",
+    )
+    _audit(
+        admin,
+        "farmer_approved",
+        "user",
+        f"{user.email} — {body.farm_size_ha} ha"
+        + (f" — notes: {body.admin_notes}" if body.admin_notes else ""),
+    )
+    return _user_item(updated)  # type: ignore[arg-type]
+
+
+@router.post("/users/{user_id}/reject", response_model=AdminUserItem)
+def reject_farmer_route(user_id: str, admin: UserRecord = Depends(require_admin)):
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != "farmer":
+        raise HTTPException(status_code=400, detail="Only farmer accounts can be rejected")
+    updated = update_user(user_id, approval_status="rejected", disabled=True)
+    try:
+        disable_firebase_user(user.uid, True)
+    except Exception:
+        pass
+    _audit(admin, "farmer_rejected", "user", user.email, severity="warning")
+    return _user_item(updated)  # type: ignore[arg-type]
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserItem)

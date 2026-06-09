@@ -17,6 +17,9 @@ class User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     district: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    farm_size_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_status: Mapped[str] = mapped_column(String(20), default="approved")
+    field_data_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

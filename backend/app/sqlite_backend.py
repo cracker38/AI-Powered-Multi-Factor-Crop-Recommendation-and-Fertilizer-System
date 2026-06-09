@@ -6,11 +6,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, init_db
 from app.firestore_db import UserRecord
+from app.user_profile_utils import parse_field_data, field_data_to_json
 from app.models import CropPrediction, TrainingDataset, User
 
 USERS = "users"
@@ -34,6 +35,9 @@ def _ensure_schema() -> None:
         for stmt in (
             "ALTER TABLE users ADD COLUMN phone TEXT",
             "ALTER TABLE users ADD COLUMN district TEXT",
+            "ALTER TABLE users ADD COLUMN farm_size_ha REAL",
+            "ALTER TABLE users ADD COLUMN approval_status TEXT DEFAULT 'approved'",
+            "ALTER TABLE users ADD COLUMN field_data_json TEXT",
         ):
             try:
                 conn.execute(text(stmt))
@@ -56,6 +60,9 @@ def _user_row_to_record(u: User) -> UserRecord:
         disabled=bool(u.disabled),
         phone=getattr(u, "phone", None),
         district=getattr(u, "district", None),
+        farm_size_ha=getattr(u, "farm_size_ha", None),
+        approval_status=getattr(u, "approval_status", None) or "approved",
+        field_data=parse_field_data(getattr(u, "field_data_json", None)),
         created_at=u.created_at,
     )
 
@@ -91,11 +98,22 @@ def upsert_user(
     disabled: bool = False,
     phone: str | None = None,
     district: str | None = None,
+    farm_size_ha: float | None = None,
+    approval_status: str | None = None,
+    field_data: dict | None = None,
 ) -> UserRecord:
     with _session() as db:
         u = _resolve_user(db, uid)
+        is_new = u is None
         if u is None:
-            u = User(firebase_uid=uid, email=email, display_name=display_name, role=role, disabled=disabled)
+            u = User(
+                firebase_uid=uid,
+                email=email,
+                display_name=display_name,
+                role=role,
+                disabled=disabled,
+                approval_status=approval_status or ("pending" if role == "farmer" else "approved"),
+            )
             db.add(u)
         else:
             u.email = email
@@ -106,6 +124,14 @@ def upsert_user(
             u.phone = phone
         if district is not None:
             u.district = district
+        if farm_size_ha is not None:
+            u.farm_size_ha = farm_size_ha
+        if approval_status is not None:
+            u.approval_status = approval_status
+        elif is_new and role == "farmer":
+            u.approval_status = "pending"
+        if field_data is not None:
+            u.field_data_json = field_data_to_json(field_data)
         db.commit()
         db.refresh(u)
         return _user_row_to_record(u)
@@ -116,6 +142,9 @@ def update_user(uid: str, **fields: Any) -> UserRecord | None:
         u = _resolve_user(db, uid)
         if u is None:
             return None
+        if "field_data" in fields:
+            fd = fields.pop("field_data")
+            u.field_data_json = field_data_to_json(fd)
         for key, val in fields.items():
             if hasattr(u, key):
                 setattr(u, key, val)
@@ -245,7 +274,12 @@ def count_farmers() -> int:
 
 def count_active_farmers() -> int:
     with _session() as db:
-        return db.query(User).filter(User.role == "farmer", User.disabled.is_(False)).count()
+        return (
+            db.query(User)
+            .filter(User.role == "farmer", User.disabled.is_(False))
+            .filter(or_(User.approval_status == "approved", User.approval_status.is_(None)))
+            .count()
+        )
 
 
 def count_disabled_farmers() -> int:

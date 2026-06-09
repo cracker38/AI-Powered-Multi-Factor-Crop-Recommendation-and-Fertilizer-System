@@ -6,11 +6,13 @@ import '../../core/agriculture_options.dart';
 import '../../core/farmer_theme.dart';
 import '../../core/rwanda_season.dart';
 import '../../models/farm_input.dart';
+import '../../models/live_climate.dart';
 import '../../models/user_profile.dart';
 import '../../services/api_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/auth/auth_form_card.dart';
 import '../../widgets/farmer/farmer_input_field.dart';
+import '../../widgets/farmer/live_climate_banner.dart';
 import '../../widgets/farmer/farmer_page_header.dart';
 import '../../widgets/farmer/farmer_section_title.dart';
 import 'recommendation_result_screen.dart';
@@ -44,6 +46,41 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
   String _soilType = 'loam';
   late final String _autoSeason = RwandaSeason.current();
   bool _busy = false;
+  bool _climateLoading = false;
+  LiveClimate? _liveClimate;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLiveClimate();
+  }
+
+  Future<void> _loadLiveClimate() async {
+    final district = widget.profile?.district;
+    if (district == null || district.isEmpty) return;
+    setState(() => _climateLoading = true);
+    try {
+      final climate = await widget.api.fetchLiveClimate(district: district);
+      if (!mounted) return;
+      setState(() {
+        _liveClimate = climate;
+        if (climate.available) {
+          if (climate.temperatureC != null) _temp.text = climate.temperatureC!.toStringAsFixed(1);
+          if (climate.rainfallMm != null) _rain.text = climate.rainfallMm!.toStringAsFixed(0);
+          if (climate.humidityPct != null) _hum.text = climate.humidityPct!.toStringAsFixed(0);
+        }
+      });
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _liveClimate = LiveClimate(available: false, reason: e.message));
+      }
+    } finally {
+      if (mounted) setState(() => _climateLoading = false);
+    }
+  }
+
+  bool get _climateAuto =>
+      _liveClimate?.available == true && widget.profile?.district != null && widget.profile!.district!.isNotEmpty;
 
   @override
   void dispose() {
@@ -80,6 +117,7 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
         soilType: _soilType,
         seasonAuto: true,
         district: widget.profile?.district,
+        useLiveClimate: _climateAuto,
       );
       final result = await widget.api.evaluate(input);
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -257,28 +295,44 @@ class _RecommendationInputScreenState extends State<RecommendationInputScreen> {
                       ),
                       const SizedBox(height: 20),
                       const FarmerSectionTitle(title: 'Climate & rainfall'),
+                      LiveClimateBanner(
+                        climate: _liveClimate,
+                        loading: _climateLoading,
+                        onRefresh: widget.profile?.district != null ? _loadLiveClimate : null,
+                      ),
+                      if (widget.profile?.district == null || widget.profile!.district!.isEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Add your district in profile settings to load live temperature, humidity, and rainfall automatically.',
+                          style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.9), fontSize: 13),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
                       FarmerInputField(
-                        label: 'Temperature °C',
+                        label: 'Temperature °C (live)',
                         controller: _temp,
                         icon: Icons.thermostat_rounded,
                         min: -10,
                         max: 55,
+                        readOnly: _climateAuto,
                       ),
                       const SizedBox(height: 12),
                       FarmerInputField(
-                        label: 'Rainfall (mm)',
+                        label: 'Rainfall mm (7-day estimate)',
                         controller: _rain,
                         icon: Icons.cloud_outlined,
                         min: 0,
                         max: 2000,
+                        readOnly: _climateAuto,
                       ),
                       const SizedBox(height: 12),
                       FarmerInputField(
-                        label: 'Humidity %',
+                        label: 'Humidity % (live)',
                         controller: _hum,
                         icon: Icons.air_rounded,
                         min: 0,
                         max: 100,
+                        readOnly: _climateAuto,
                       ),
                       const SizedBox(height: 28),
                       FilledButton(

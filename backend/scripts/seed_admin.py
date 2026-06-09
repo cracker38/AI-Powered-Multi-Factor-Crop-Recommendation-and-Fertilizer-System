@@ -49,6 +49,7 @@ def main() -> None:
         display_name="System Administrator",
         role="admin",
         disabled=False,
+        approval_status="approved",
     )
     _retire_legacy_admin(email)
     print(f"Admin seeded in Firestore: users/{uid}")

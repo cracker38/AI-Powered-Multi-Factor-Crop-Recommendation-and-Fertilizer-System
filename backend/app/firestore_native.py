@@ -8,6 +8,7 @@ from typing import Any
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP, FieldFilter
 
 from app.firebase_app import get_firestore_client
+from app.user_profile_utils import parse_field_data, field_data_to_json
 
 USERS = "users"
 PREDICTIONS = "predictions"
@@ -27,11 +28,18 @@ class UserRecord:
     disabled: bool
     phone: str | None = None
     district: str | None = None
+    farm_size_ha: float | None = None
+    approval_status: str = "approved"
+    field_data: dict | None = None
     created_at: datetime | None = None
 
     @property
     def id(self) -> str:
         return self.uid
+
+    @property
+    def is_approved(self) -> bool:
+        return self.role == "admin" or self.approval_status == "approved"
 
 
 def _db():
@@ -57,6 +65,9 @@ def _user_from_doc(uid: str, data: dict) -> UserRecord:
         disabled=bool(data.get("disabled", False)),
         phone=data.get("phone"),
         district=data.get("district"),
+        farm_size_ha=data.get("farm_size_ha"),
+        approval_status=data.get("approval_status") or "approved",
+        field_data=parse_field_data(data.get("field_data")),
         created_at=_ts_to_dt(data.get("created_at")),
     )
 
@@ -89,6 +100,9 @@ def upsert_user(
     disabled: bool = False,
     phone: str | None = None,
     district: str | None = None,
+    farm_size_ha: float | None = None,
+    approval_status: str | None = None,
+    field_data: dict | None = None,
 ) -> UserRecord:
     ref = _db().collection(USERS).document(uid)
     existing = ref.get()
@@ -103,6 +117,14 @@ def upsert_user(
         payload["phone"] = phone
     if district is not None:
         payload["district"] = district
+    if farm_size_ha is not None:
+        payload["farm_size_ha"] = farm_size_ha
+    if approval_status is not None:
+        payload["approval_status"] = approval_status
+    elif not existing.exists and role == "farmer":
+        payload["approval_status"] = "pending"
+    if field_data is not None:
+        payload["field_data"] = field_data
     if not existing.exists:
         payload["created_at"] = SERVER_TIMESTAMP
     ref.set(payload, merge=True)
@@ -113,6 +135,9 @@ def update_user(uid: str, **fields: Any) -> UserRecord | None:
     ref = _db().collection(USERS).document(uid)
     if not ref.get().exists:
         return None
+    if "field_data" in fields:
+        fd = fields.pop("field_data")
+        fields["field_data"] = fd if isinstance(fd, dict) else fd
     fields["updated_at"] = SERVER_TIMESTAMP
     ref.update(fields)
     return get_user(uid)
@@ -188,7 +213,8 @@ def count_farmers() -> int:
 def count_active_farmers() -> int:
     n = 0
     for snap in _db().collection(USERS).where(filter=FieldFilter("role", "==", "farmer")).stream():
-        if not bool((snap.to_dict() or {}).get("disabled", False)):
+        data = snap.to_dict() or {}
+        if not bool(data.get("disabled", False)) and (data.get("approval_status") or "approved") == "approved":
             n += 1
     return n
 

@@ -1,3 +1,5 @@
+import '../models/farmer_field_data.dart';
+
 class AdminUser {
   const AdminUser({
     required this.id,
@@ -9,6 +11,9 @@ class AdminUser {
     this.predictionCount = 0,
     this.phone,
     this.district,
+    this.farmSizeHa,
+    this.approvalStatus = 'approved',
+    this.fieldData,
   });
 
   final String id;
@@ -20,9 +25,14 @@ class AdminUser {
   final int predictionCount;
   final String? phone;
   final String? district;
+  final double? farmSizeHa;
+  final String approvalStatus;
+  final FarmerFieldData? fieldData;
 
   bool get isAdmin => role == 'admin';
   bool get isFarmer => role == 'farmer';
+  bool get isPending => isFarmer && approvalStatus == 'pending';
+  bool get isApproved => isAdmin || approvalStatus == 'approved';
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
     DateTime? created;
@@ -40,6 +50,9 @@ class AdminUser {
       predictionCount: json['prediction_count'] as int? ?? 0,
       phone: json['phone'] as String?,
       district: json['district'] as String?,
+      farmSizeHa: (json['farm_size_ha'] as num?)?.toDouble(),
+      approvalStatus: json['approval_status'] as String? ?? 'approved',
+      fieldData: FarmerFieldData.tryParse(json['field_data']),
     );
   }
 }

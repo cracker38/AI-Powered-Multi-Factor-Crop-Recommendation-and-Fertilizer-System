@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import require_farmer
+from app.deps import require_approved_farmer, require_farmer
 from app.farm_improvement import build_improvement_actions
 from app.fertilizer_service import recommend_fertilizers, soil_health_assessment
 from app.firestore_db import (
@@ -25,7 +25,7 @@ from app.schemas import (
     PredictionHistoryItem,
     WeatherInsight,
 )
-from app.weather_service import weather_insight as build_weather_insight
+from app.weather_service import apply_live_climate, weather_insight as build_weather_insight
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
@@ -113,11 +113,26 @@ def _build_evaluation(
 @router.post("/evaluate", response_model=CropPredictionResponse)
 def evaluate(
     payload: FarmConditionsRequest,
-    user: UserRecord = Depends(require_farmer),
+    user: UserRecord = Depends(require_approved_farmer),
 ):
     district = payload.district or getattr(user, "district", None)
     season = current_rwanda_season()
-    payload = payload.model_copy(update={"district": district, "season": season})
+    temp, hum, rain, _climate_meta = apply_live_climate(
+        district=district,
+        temperature_c=payload.temperature_c,
+        humidity_pct=payload.humidity_pct,
+        rainfall_mm=payload.rainfall_mm,
+        use_live=payload.use_live_climate,
+    )
+    payload = payload.model_copy(
+        update={
+            "district": district,
+            "season": season,
+            "temperature_c": temp,
+            "humidity_pct": hum,
+            "rainfall_mm": rain,
+        }
+    )
 
     try:
         ranked, explanation, ml_info = predict_ranked(

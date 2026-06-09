@@ -4,6 +4,7 @@ import '../models/user_profile.dart';
 import '../widgets/shared/app_loading_screen.dart';
 import 'admin/admin_shell.dart';
 import 'auth/login_screen.dart';
+import 'farmer/pending_approval_screen.dart';
 import 'farmer/farmer_shell.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -144,6 +145,15 @@ class _AppEntryState extends State<AppEntry> {
 
     if (_profile!.isAdmin) {
       return AdminShell(profile: _profile!, api: _api!, onLogout: _logout);
+    }
+
+    if (_profile!.isPending || _profile!.isRejected) {
+      return PendingApprovalScreen(
+        profile: _profile!,
+        api: _api!,
+        onApproved: _loadProfile,
+        onLogout: _logout,
+      );
     }
 
     return FarmerShell(profile: _profile!, api: _api!, onLogout: _logout);

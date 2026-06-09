@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import require_farmer
+from app.deps import get_current_user, require_farmer
 from app.firestore_db import (
     UserRecord,
     create_outcome_feedback,
@@ -11,7 +11,8 @@ from app.firestore_db import (
     list_farmer_tips,
     list_outcome_feedback_for_user,
 )
-from app.schemas import FarmerTipItem, OutcomeFeedbackItem, OutcomeFeedbackRequest
+from app.schemas import FarmerTipItem, ForecastDayItem, LiveClimateResponse, OutcomeFeedbackItem, OutcomeFeedbackRequest
+from app.weather_service import get_live_field_climate
 
 router = APIRouter(prefix="/farmer", tags=["farmer"])
 
@@ -31,7 +32,7 @@ _DEFAULT_TIPS = [
     {
         "id": "tip-3",
         "title": "Season-aware planting",
-        "message": "Use Season A/B/C guidance with live Open-Meteo forecasts — avoid excess fertilizer in dry Season C.",
+        "message": "Use Season A/B/C guidance with live OpenWeatherMap and Open-Meteo forecasts — avoid excess fertilizer in dry Season C.",
         "category": "crop",
     },
     {
@@ -49,6 +50,35 @@ def _ts(value) -> datetime | None:
     if hasattr(value, "timestamp"):
         return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
     return value
+
+
+@router.get("/live-climate", response_model=LiveClimateResponse)
+def live_climate(
+    district: str | None = None,
+    user: UserRecord = Depends(get_current_user),
+):
+    """Live temperature, humidity, and rainfall for the farmer's district (OpenWeatherMap + Open-Meteo fallback)."""
+    resolved = (district or getattr(user, "district", None) or "Kigali").strip()
+    raw = get_live_field_climate(resolved)
+    daily = [
+        ForecastDayItem(**d)
+        for d in (raw.get("forecast_daily") or [])
+        if isinstance(d, dict)
+    ]
+    return LiveClimateResponse(
+        available=bool(raw.get("available")),
+        temperature_c=raw.get("temperature_c"),
+        humidity_pct=raw.get("humidity_pct"),
+        rainfall_mm=raw.get("rainfall_mm"),
+        district=str(raw.get("district") or resolved),
+        source=str(raw.get("source") or ""),
+        provider_url=str(raw.get("provider_url") or ""),
+        secondary_source=str(raw.get("secondary_source") or ""),
+        fetched_at=raw.get("fetched_at"),
+        note=str(raw.get("note") or ""),
+        reason=str(raw.get("reason") or ""),
+        forecast_daily=daily,
+    )
 
 
 @router.get("/tips", response_model=list[FarmerTipItem])

@@ -16,11 +16,18 @@ class UserRecord:
     disabled: bool
     phone: str | None = None
     district: str | None = None
+    farm_size_ha: float | None = None
+    approval_status: str = "approved"  # pending | approved | rejected
+    field_data: dict | None = None
     created_at: datetime | None = None
 
     @property
     def id(self) -> str:
         return self.uid
+
+    @property
+    def is_approved(self) -> bool:
+        return self.role == "admin" or self.approval_status == "approved"
 
 
 if settings.storage_backend == "sqlite":
