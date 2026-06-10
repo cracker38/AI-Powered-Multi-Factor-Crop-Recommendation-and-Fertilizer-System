@@ -1,0 +1,9 @@
+# Arduino CLI / IDE 2 — select ESP8266 (required for ESP8266WiFi.h)
+# Install once: arduino-cli core install esp8266:esp8266
+default_profile: nodemcu
+
+profiles:
+  nodemcu:
+    fqbn: esp8266:esp8266:nodemcuv2
+    platforms:
+      - platform: esp8266:esp8266
