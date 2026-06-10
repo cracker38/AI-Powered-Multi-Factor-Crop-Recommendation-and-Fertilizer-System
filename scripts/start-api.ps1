@@ -6,4 +6,5 @@ if (-not (Test-Path $venv)) {
 }
 Set-Location (Join-Path $Root "backend")
 $env:GRPC_DNS_RESOLVER = "native"
-& "..\$venv\Scripts\uvicorn.exe" app.main:app --reload --host 0.0.0.0 --port 8000
+$uvicorn = Join-Path $venv "Scripts\uvicorn.exe"
+& $uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

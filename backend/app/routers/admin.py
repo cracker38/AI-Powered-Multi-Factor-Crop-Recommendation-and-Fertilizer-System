@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from app.deps import require_admin
+from app.farm_improvement import build_improvement_actions
+from app.fertilizer_service import recommend_fertilizers, soil_health_assessment
+from app.ml_service import predict_ranked
+from app.rwanda_season import current_rwanda_season, season_label
 from app.firestore_timeout import run_firestore
 from app.firebase_app import delete_firebase_user, disable_firebase_user
 from app.firestore_db import (
@@ -18,6 +22,7 @@ from app.firestore_db import (
     count_farmers,
     count_predictions,
     create_dataset,
+    create_prediction,
     create_notification,
     avg_soil_health_score,
     crop_distribution,
@@ -59,6 +64,7 @@ from app.schemas import (
 )
 from app.user_profile_utils import user_to_profile
 from app.weather_service import apply_live_climate
+from app.weather_service import weather_insight as build_weather_insight
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -201,6 +207,65 @@ def approve_farmer_route(
         update={"temperature_c": temp, "humidity_pct": hum, "rainfall_mm": rain}
     ).model_dump()
 
+    season = current_rwanda_season()
+    ranked, explanation, ml_info = predict_ranked(
+        nitrogen=field_data["nitrogen"],
+        phosphorus=field_data["phosphorus"],
+        potassium=field_data["potassium"],
+        soil_moisture=field_data["soil_moisture"],
+        temperature_c=field_data["temperature_c"],
+        humidity_pct=field_data["humidity_pct"],
+        soil_ph=field_data["soil_ph"],
+        rainfall_mm=field_data["rainfall_mm"],
+        soil_type=field_data["soil_type"],
+        season=season,
+        district=body.district or user.district,
+    )
+    top_crop = ranked[0][0]
+    soil_health_score, soil_health_label = soil_health_assessment(
+        field_data["nitrogen"],
+        field_data["phosphorus"],
+        field_data["potassium"],
+        field_data["soil_ph"],
+        field_data["soil_moisture"],
+    )
+    fert_raw, nutrient_analysis, fert_notes = recommend_fertilizers(
+        crop=top_crop,
+        nitrogen=field_data["nitrogen"],
+        phosphorus=field_data["phosphorus"],
+        potassium=field_data["potassium"],
+        soil_ph=field_data["soil_ph"],
+        soil_moisture=field_data["soil_moisture"],
+        soil_type=field_data["soil_type"],
+        season=season,
+        district=body.district or user.district,
+    )
+    precision_notes = list(ml_info.get("precision_notes_adss") or [])
+    if ml_info.get("fertilizer_applicable", True):
+        precision_notes.extend(fert_notes)
+    weather_insight = build_weather_insight(
+        season=season,
+        district=body.district or user.district,
+        rainfall_mm=field_data["rainfall_mm"],
+        temperature_c=field_data["temperature_c"],
+        humidity_pct=field_data["humidity_pct"],
+    )
+    improvement_actions = build_improvement_actions(
+        ranked[0][1],
+        top_crop,
+        nitrogen=field_data["nitrogen"],
+        phosphorus=field_data["phosphorus"],
+        potassium=field_data["potassium"],
+        soil_moisture=field_data["soil_moisture"],
+        temperature_c=field_data["temperature_c"],
+        humidity_pct=field_data["humidity_pct"],
+        soil_ph=field_data["soil_ph"],
+        rainfall_mm=field_data["rainfall_mm"],
+        soil_type=field_data["soil_type"],
+        season=season,
+        soil_health_score=soil_health_score,
+    )
+
     updated = update_user(
         user_id,
         display_name=body.display_name,
@@ -210,6 +275,37 @@ def approve_farmer_route(
         field_data=field_data,
         approval_status="approved",
         disabled=False,
+    )
+    create_prediction(
+        user.uid,
+        {
+            "nitrogen": field_data["nitrogen"],
+            "phosphorus": field_data["phosphorus"],
+            "potassium": field_data["potassium"],
+            "soil_moisture": field_data["soil_moisture"],
+            "temperature_c": field_data["temperature_c"],
+            "humidity_pct": field_data["humidity_pct"],
+            "soil_ph": field_data["soil_ph"],
+            "rainfall_mm": field_data["rainfall_mm"],
+            "soil_type": field_data["soil_type"],
+            "season": season,
+            "district": body.district or user.district,
+            "model_version": str(ml_info.get("model_version", "unknown")),
+            "top_crop": top_crop,
+            "top_confidence": ranked[0][1],
+            "explanation": explanation,
+            "full_ranking": [{"crop": n, "confidence": s} for n, s in ranked],
+            "soil_health_score": soil_health_score,
+            "soil_health_label": soil_health_label,
+            "fertilizers": fert_raw,
+            "nutrient_analysis": nutrient_analysis,
+            "weather_insight": weather_insight,
+            "precision_notes": precision_notes,
+            "environment_analysis": list(ml_info.get("environment_analysis") or []),
+            "season_used": season,
+            "season_label": season_label(season),
+            "improvement_actions": improvement_actions,
+        },
     )
     create_notification(
         title="Farmer account approved",

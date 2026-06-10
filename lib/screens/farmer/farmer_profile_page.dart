@@ -14,6 +14,8 @@ import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/farmer/farmer_card.dart';
 import '../../widgets/farmer/farmer_page_header.dart';
 import '../../widgets/farmer/farmer_section_title.dart';
+import '../../models/prediction_history_item.dart';
+import '../../widgets/farmer/farmer_shared.dart';
 
 class FarmerProfilePage extends StatefulWidget {
   const FarmerProfilePage({
@@ -39,6 +41,9 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
   String? _district;
   bool _saving = false;
   bool _notifyTips = true;
+  bool _assessmentLoading = true;
+  String? _assessmentError;
+  PredictionHistoryItem? _latestAssessment;
 
   @override
   void initState() {
@@ -54,6 +59,25 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
     if (mounted) setState(() => _notifyTips = show);
   }
 
+  Future<void> _loadLatestAssessment() async {
+    setState(() {
+      _assessmentLoading = true;
+      _assessmentError = null;
+    });
+    try {
+      final items = await widget.api.fetchHistory(limit: 1);
+      if (!mounted) return;
+      setState(() {
+        _latestAssessment = items.isNotEmpty ? items.first : null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _assessmentError = e.message);
+    } finally {
+      if (mounted) setState(() => _assessmentLoading = false);
+    }
+  }
+
   @override
   void didUpdateWidget(covariant FarmerProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -65,6 +89,9 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
     }
     if (oldWidget.profile.district != widget.profile.district) {
       _district = widget.profile.district;
+    }
+    if (oldWidget.profile.id != widget.profile.id) {
+      _loadLatestAssessment();
     }
   }
 
@@ -213,6 +240,66 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
                         title: const Text('Extension advisory', style: TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: const Text('Show Rwanda farming tips on home dashboard'),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FarmerCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const FarmerSectionTitle(title: 'Latest admin assessment'),
+                      if (_assessmentLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: CircularProgressIndicator(color: AppColors.primary),
+                          ),
+                        )
+                      else if (_assessmentError != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_assessmentError!, style: const TextStyle(color: AppColors.errorText)),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _loadLatestAssessment,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        )
+                      else if (_latestAssessment == null)
+                        const Text(
+                          'No admin-generated analysis yet. Once your account is approved, the result will appear here.',
+                          style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+                        )
+                      else ...[
+                        Text(
+                          _latestAssessment!.topCrop.toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Suitability ${(_latestAssessment!.topConfidence * 100).toStringAsFixed(1)}% · '
+                          'Soil health ${_latestAssessment!.soilHealthScore.toStringAsFixed(0)}',
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Generated ${_latestAssessment!.createdAt.toLocal()}',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        ),
+                        const SizedBox(height: 14),
+                        OutlinedButton.icon(
+                          onPressed: () => showFarmerEvaluationDetail(
+                            context,
+                            api: widget.api,
+                            predictionId: _latestAssessment!.id,
+                          ),
+                          icon: const Icon(Icons.visibility_outlined),
+                          label: const Text('View full analysis'),
+                        ),
+                      ],
                     ],
                   ),
                 ),

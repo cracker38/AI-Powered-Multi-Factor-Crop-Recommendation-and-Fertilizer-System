@@ -53,7 +53,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
     _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (mounted && !_loading) _load(silent: true);
     });

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/farm_input.dart';
 import '../models/farmer_field_data.dart';
 import '../models/crop_prediction.dart';
 import '../models/prediction_history_item.dart';

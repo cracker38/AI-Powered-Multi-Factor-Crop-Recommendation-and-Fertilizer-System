@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
@@ -29,6 +31,24 @@ class PendingApprovalScreen extends StatefulWidget {
 class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
   bool _busy = false;
   String? _message;
+  Timer? _statusTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || _busy || widget.profile.isRejected) {
+        return;
+      }
+      _refreshStatus(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _submit(FarmerFieldData data) async {
     setState(() {
@@ -47,20 +67,25 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
     }
   }
 
-  Future<void> _refreshStatus() async {
-    setState(() => _busy = true);
+  Future<void> _refreshStatus({bool silent = false}) async {
+    if (!silent) {
+      setState(() => _busy = true);
+    }
     try {
       final profile = await widget.api.syncProfile();
       if (!mounted) return;
       if (profile.isApproved) {
+        _statusTimer?.cancel();
         widget.onApproved();
       } else {
-        setState(() => _message = 'Still pending approval. You will be notified when your account is activated.');
+        if (!silent) {
+          setState(() => _message = 'Still pending approval. You will be notified when your account is activated.');
+        }
       }
     } on ApiException catch (e) {
-      if (mounted) setState(() => _message = e.message);
+      if (!silent && mounted) setState(() => _message = e.message);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (!silent && mounted) setState(() => _busy = false);
     }
   }
 

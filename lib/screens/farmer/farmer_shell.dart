@@ -8,7 +8,7 @@ import '../../services/farmer_controller.dart';
 import 'farmer_dashboard_page.dart';
 import 'farmer_history_page.dart';
 import 'farmer_profile_page.dart';
-import 'recommendation_input_screen.dart';
+import 'farmer_plan_page.dart';
 
 class FarmerShell extends StatefulWidget {
   const FarmerShell({
@@ -39,18 +39,12 @@ class _FarmerShellState extends State<FarmerShell> {
 
   void _go(int i) {
     setState(() => _index = i);
-    if (i == 0 || i == 2) {
+    if (i == 0 || i == 1 || i == 2) {
       _farmer.refresh(force: true);
     }
   }
 
   void _onProfileUpdated(UserProfile p) => setState(() => _profile = p);
-
-  void _onEvaluationComplete() {
-    _farmer.invalidate();
-    _farmer.refresh(force: true);
-    _go(0);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,10 +56,9 @@ class _FarmerShellState extends State<FarmerShell> {
         onViewHistory: () => _go(2),
         onViewProfile: () => _go(3),
       ),
-      RecommendationInputScreen(
-        api: widget.api,
-        profile: _profile,
-        onEvaluationComplete: _onEvaluationComplete,
+      FarmerPlanPage(
+        farmer: _farmer,
+        onViewHistory: () => _go(2),
       ),
       FarmerHistoryPage(api: widget.api, farmer: _farmer),
       FarmerProfilePage(
@@ -107,7 +100,7 @@ class _FarmerShellState extends State<FarmerShell> {
             NavigationDestination(
               icon: Icon(Icons.grass_outlined),
               selectedIcon: Icon(Icons.grass_rounded),
-              label: 'Analyze',
+              label: 'Plan',
             ),
             NavigationDestination(
               icon: Icon(Icons.history_outlined),

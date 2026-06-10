@@ -112,29 +112,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       if (!mounted) return;
-      await widget.onRegistered();
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Account submitted'),
+          content: Text(
+            apiSynced
+                ? 'Your farmer account is waiting for admin approval. Sign in again after it is activated.'
+                : 'Your account is waiting for admin approval. The API is not fully synced yet, but your registration was saved. Sign in again after activation.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+
+      await _auth.signOut();
       if (mounted) {
         Navigator.of(context).pop();
-        if (!apiSynced) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Account created — pending admin approval. Submit your field data after sign-in. '
-                'Start the API on port 8000 for full sync.',
-              ),
-              duration: Duration(seconds: 6),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Registration submitted. An administrator must approve your account before you can analyze crops.',
-              ),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
       }
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? 'Registration failed');

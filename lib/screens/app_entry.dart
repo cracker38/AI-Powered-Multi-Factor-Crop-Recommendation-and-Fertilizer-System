@@ -4,7 +4,6 @@ import '../models/user_profile.dart';
 import '../widgets/shared/app_loading_screen.dart';
 import 'admin/admin_shell.dart';
 import 'auth/login_screen.dart';
-import 'farmer/pending_approval_screen.dart';
 import 'farmer/farmer_shell.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -80,6 +79,22 @@ class _AppEntryState extends State<AppEntry> {
         await FirestoreService().syncCurrentAuthUser(profile);
       } catch (_) {}
       if (!mounted) return;
+
+      if (profile.isPending || profile.isRejected) {
+        final message = profile.isRejected
+            ? 'Your account was not approved. Contact your local extension officer or administrator.'
+            : 'Your account is waiting for admin approval. Please sign in again after it has been activated.';
+        await _auth.signOut();
+        if (!mounted) return;
+        setState(() {
+          _profile = null;
+          _api = null;
+          _loading = false;
+          _bootstrapError = message;
+        });
+        return;
+      }
+
       setState(() {
         _profile = profile;
         _api = api;
@@ -145,15 +160,6 @@ class _AppEntryState extends State<AppEntry> {
 
     if (_profile!.isAdmin) {
       return AdminShell(profile: _profile!, api: _api!, onLogout: _logout);
-    }
-
-    if (_profile!.isPending || _profile!.isRejected) {
-      return PendingApprovalScreen(
-        profile: _profile!,
-        api: _api!,
-        onApproved: _loadProfile,
-        onLogout: _logout,
-      );
     }
 
     return FarmerShell(profile: _profile!, api: _api!, onLogout: _logout);

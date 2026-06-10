@@ -29,7 +29,9 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   Future<void> _load() async {
@@ -46,6 +48,11 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
     } on ApiException catch (e) {
       setState(() {
         _error = e.message;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Could not load farmers: $e';
         _loading = false;
       });
     }
@@ -495,13 +502,16 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
           ],
         ),
         trailing: user.isPending
-            ? FilledButton(
-                onPressed: () => _approve(user),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+            ? SizedBox(
+                width: 96,
+                child: FilledButton(
+                  onPressed: () => _approve(user),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  child: const Text('Approve'),
                 ),
-                child: const Text('Approve'),
               )
             : PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert_rounded),

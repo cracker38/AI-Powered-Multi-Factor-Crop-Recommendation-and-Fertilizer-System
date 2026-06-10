@@ -35,8 +35,11 @@ class _AdminShellState extends State<AdminShell> {
   void initState() {
     super.initState();
     _admin = AdminController(widget.api);
-    _admin.checkApiHealth();
-    _admin.loadAnalytics();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _admin.checkApiHealth();
+      _admin.loadAnalytics();
+    });
   }
 
   @override

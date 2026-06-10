@@ -46,6 +46,20 @@ class ApiService {
         'Request timed out. The API may be running but is slow — wait and tap Retry, or restart scripts/start-api.ps1.',
         statusCode: 503,
       );
+    } catch (e) {
+      final detail = e.toString().toLowerCase();
+      final unreachable = detail.contains('clientexception') ||
+          detail.contains('failed to fetch') ||
+          detail.contains('connection refused') ||
+          detail.contains('failed host lookup') ||
+          detail.contains('socketexception');
+      if (unreachable) {
+        throw ApiException(
+          'The API is offline or unreachable. Start scripts/start-api.ps1 on port 8000, then retry.',
+          statusCode: 503,
+        );
+      }
+      rethrow;
     }
   }
 

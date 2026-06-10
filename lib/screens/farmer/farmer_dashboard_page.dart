@@ -132,10 +132,10 @@ class _FarmerDashboardPageState extends State<FarmerDashboardPage> {
                       child: FarmerCard(
                         child: FarmerEmptyState(
                           icon: Icons.landscape_rounded,
-                          title: 'No field evaluations yet',
+                          title: 'No admin plan yet',
                           message:
-                              'Start your first ${Brand.productName} assessment for ranked crops, a fertilizer plan, soil health score, and district weather.',
-                          actionLabel: 'Start first evaluation',
+                              'Once an administrator approves your account, the crops and fertilizer plan will appear here automatically.',
+                          actionLabel: 'Open plan',
                           onAction: widget.onGetRecommendation,
                         ),
                       ),
@@ -224,7 +224,7 @@ class _FarmerDashboardPageState extends State<FarmerDashboardPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text(
-                      'MULTI-FACTOR AI',
+                      'ADMIN PLAN',
                       style: TextStyle(
                         color: AppColors.primaryDark,
                         fontSize: 10,
@@ -239,12 +239,12 @@ class _FarmerDashboardPageState extends State<FarmerDashboardPage> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'New crop & fertilizer evaluation',
+                'Crops & fertilizer plan from admin',
                 style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.2),
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter N-P-K, pH, moisture, climate, soil type, and season — get ranked crops, fertilizer plan, charts, and live weather.',
+                'Your approved account receives a saved crop plan with fertilizer guidance, soil health, and weather context generated during admin approval.',
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, height: 1.45),
               ),
             ],
@@ -261,8 +261,8 @@ class _FarmerDashboardPageState extends State<FarmerDashboardPage> {
           children: [
             Expanded(
               child: FarmerQuickAction(
-                icon: Icons.analytics_rounded,
-                label: 'Analyze',
+                icon: Icons.assignment_rounded,
+                label: 'Plan',
                 color: AppColors.primary,
                 onTap: widget.onGetRecommendation,
               ),

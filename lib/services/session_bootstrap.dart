@@ -26,6 +26,17 @@ class SessionBootstrap {
         return _firestoreFallback(e.message);
       }
       rethrow;
+    } catch (e) {
+      final detail = e.toString().toLowerCase();
+      final unreachable = detail.contains('connection refused') ||
+          detail.contains('failed host lookup') ||
+          detail.contains('failed to fetch') ||
+          detail.contains('socketexception') ||
+          detail.contains('clientexception');
+      if (unreachable) {
+        return _firestoreFallback('Could not reach the API.');
+      }
+      rethrow;
     }
   }
 
