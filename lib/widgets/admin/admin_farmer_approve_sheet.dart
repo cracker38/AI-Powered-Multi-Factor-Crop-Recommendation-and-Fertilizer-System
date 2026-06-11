@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/rwanda_districts.dart';
+import '../../models/admin_sensor_field_data.dart';
 import '../../models/admin_user.dart';
 import '../../models/farmer_field_data.dart';
 import '../../services/api_service.dart';
 import '../../widgets/farmer/farmer_field_data_form.dart';
+import 'admin_sensor_reading_preview.dart';
 
 Future<bool?> showAdminFarmerApproveSheet(
   BuildContext context, {
@@ -41,6 +43,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
   bool _busy = false;
   bool _sensorLoading = true;
   bool _sensorLoaded = false;
+  AdminSensorFieldData? _sensorReading;
   String? _error;
   String? _sensorMessage;
 
@@ -70,8 +73,9 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
       if (reading != null) {
         setState(() {
           _sensorLoaded = true;
+          _sensorReading = reading;
           _sensorMessage =
-              'Loaded ${reading.summaryLabel} for ${widget.user.email}. Review values before approving.';
+              'This farmer is linked to the live ESP8266 probe. Values below were loaded automatically.';
         });
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _fieldDataKey.currentState?.applyFieldData(reading.fieldData);
@@ -150,7 +154,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Approve farmer',
+                'Approve farmer with sensor data',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               Text(
@@ -159,7 +163,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Field data is loaded from the ESP8266 soil sensor when available. Review and edit before activating.',
+                'This account is matched to the ESP8266 7-in-1 soil sensor. Field readings are pre-filled from Firebase — review, adjust if needed, then activate.',
                 style: TextStyle(height: 1.4, color: AppColors.textSecondary),
               ),
               if (_sensorLoading) ...[
@@ -170,19 +174,27 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
               ],
               if (_sensorMessage != null && !_sensorLoading) ...[
                 const SizedBox(height: 12),
+                if (_sensorLoaded && _sensorReading != null) ...[
+                  AdminSensorReadingPreview(
+                    fieldData: _sensorReading!.fieldData,
+                    reading: _sensorReading,
+                    farmerEmail: widget.user.email,
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.08) : Colors.orange.shade50,
+                    color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.06) : Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.3) : Colors.orange.shade200,
+                      color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.2) : Colors.orange.shade200,
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        _sensorLoaded ? Icons.sensors_rounded : Icons.info_outline_rounded,
+                        _sensorLoaded ? Icons.verified_rounded : Icons.info_outline_rounded,
                         color: _sensorLoaded ? AppColors.primary : Colors.orange.shade800,
                         size: 20,
                       ),

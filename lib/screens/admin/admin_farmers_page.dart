@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/app_colors.dart';
+import '../../models/admin_pending_sensor_farmer.dart';
 import '../../models/admin_user.dart';
 import '../../services/api_service.dart';
 import '../../utils/admin_csv_export.dart';
 import '../../widgets/admin/admin_farmer_approve_sheet.dart';
 import '../../widgets/admin/admin_farmer_detail_sheet.dart';
 import '../../widgets/admin/admin_farmer_status_badge.dart';
+import '../../widgets/admin/admin_pending_sensor_banner.dart';
 import '../../widgets/admin/admin_shared.dart';
 
 enum _FarmerFilter { all, pending, active, disabled, rejected }
@@ -28,6 +30,7 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
   String _query = '';
   _FarmerFilter _filter = _FarmerFilter.all;
   String? _actionUserId;
+  AdminPendingSensorFarmer? _pendingSensor;
 
   @override
   void initState() {
@@ -44,9 +47,14 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
     });
     try {
       final raw = await widget.api.adminListUsers();
+      final pendingSensor = await widget.api.adminFetchPendingSensorFarmer();
       setState(() {
         _all = raw.map(AdminUser.fromJson).toList();
+        _pendingSensor = pendingSensor;
         _loading = false;
+        if (pendingSensor != null && _filter == _FarmerFilter.all) {
+          _filter = _FarmerFilter.pending;
+        }
       });
     } on ApiException catch (e) {
       setState(() {
@@ -87,8 +95,40 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
     return list;
   }
 
+  List<AdminUser> get _sortedVisible {
+    final list = List<AdminUser>.from(_visible);
+    final sensorId = _pendingSensor?.userId;
+    if (sensorId != null) {
+      list.sort((a, b) {
+        if (a.id == sensorId) return -1;
+        if (b.id == sensorId) return 1;
+        if (a.isPending != b.isPending) return a.isPending ? -1 : 1;
+        return 0;
+      });
+    }
+    return list;
+  }
+
+  AdminUser? get _pendingSensorUser {
+    final id = _pendingSensor?.userId;
+    if (id == null) return null;
+    for (final u in _all) {
+      if (u.id == id) return u;
+    }
+    return null;
+  }
+
+  bool _hasLiveSensor(AdminUser user) => _pendingSensor?.userId == user.id;
+
   int get _farmerCount => _all.where((u) => u.isFarmer).length;
   int get _pendingCount => _all.where((u) => u.isPending).length;
+
+  Future<void> _approvePendingSensor() async {
+    final user = _pendingSensorUser;
+    if (user != null) {
+      await _approve(user);
+    }
+  }
 
   Future<void> _approve(AdminUser user) async {
     final ok = await showAdminFarmerApproveSheet(context, api: widget.api, user: user);
@@ -314,9 +354,21 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
                               ],
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                              itemCount: _visible.length,
-                              itemBuilder: (_, i) => _farmerCard(_visible[i]),
+                              padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
+                              itemCount: _sortedVisible.length + (_pendingSensor != null ? 1 : 0),
+                              itemBuilder: (_, i) {
+                                if (_pendingSensor != null && i == 0) {
+                                  return AdminPendingSensorBanner(
+                                    pending: _pendingSensor!,
+                                    onApprove: _approvePendingSensor,
+                                  );
+                                }
+                                final index = _pendingSensor != null ? i - 1 : i;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: _farmerCard(_sortedVisible[index]),
+                                );
+                              },
                             ),
                     ),
         ),
@@ -395,7 +447,12 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor(user)),
+        border: Border.all(
+          color: _hasLiveSensor(user)
+              ? AppColors.primary
+              : _borderColor(user),
+          width: _hasLiveSensor(user) ? 1.5 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -428,7 +485,33 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
               Text('Joined $joined', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
             Text('${user.predictionCount} recommendations', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
             const SizedBox(height: 4),
-            AdminFarmerStatusBadge(user: user),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                AdminFarmerStatusBadge(user: user),
+                if (_hasLiveSensor(user))
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.sensors_rounded, size: 12, color: AppColors.primary),
+                        SizedBox(width: 4),
+                        Text(
+                          'ESP8266 live',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
         trailing: _trailingActions(user, cardBusy),
@@ -440,14 +523,17 @@ class _AdminFarmersPageState extends State<AdminFarmersPage> {
     if (cardBusy) return null;
     if (user.isPending || user.isRejected) {
       return SizedBox(
-        width: 108,
+        width: _hasLiveSensor(user) ? 118 : 108,
         child: FilledButton(
           onPressed: () => _approve(user),
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
+            backgroundColor: _hasLiveSensor(user) ? AppColors.primary : AppColors.primary,
             padding: const EdgeInsets.symmetric(horizontal: 10),
           ),
-          child: Text(user.isRejected ? 'Re-review' : 'Approve', style: const TextStyle(fontSize: 12)),
+          child: Text(
+            _hasLiveSensor(user) ? 'Approve sensor' : (user.isRejected ? 'Re-review' : 'Approve'),
+            style: const TextStyle(fontSize: 11),
+          ),
         ),
       );
     }

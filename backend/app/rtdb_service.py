@@ -161,3 +161,19 @@ def fetch_sensor_field_data(
         candidates.append(global_match)
 
     return _pick_newest(candidates)
+
+
+def find_pending_farmer_with_sensor(users: list) -> tuple[object, SensorReadingResult] | None:
+    """Match a pending farmer to the active ESP8266 reading (by UID or email)."""
+    pending = [
+        u for u in users
+        if getattr(u, "role", None) == "farmer"
+        and (getattr(u, "approval_status", None) or "approved") == "pending"
+    ]
+    if not pending:
+        return None
+    for user in pending:
+        reading = fetch_sensor_field_data(user.uid, user_email=user.email)
+        if reading is not None:
+            return user, reading
+    return None

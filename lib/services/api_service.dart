@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/admin_pending_sensor_farmer.dart';
 import '../models/admin_sensor_field_data.dart';
 import '../models/farmer_field_data.dart';
 import '../models/live_climate.dart';
@@ -228,6 +229,13 @@ class ApiService {
     final res = await _get('/api/v1/admin/users/$id/sensor-field-data');
     if (res.statusCode == 404) return null;
     return AdminSensorFieldData.fromJson((await _handle(res)) as Map<String, dynamic>);
+  }
+
+  /// Pending farmer whose ESP8266 has live readings (for approval banner).
+  Future<AdminPendingSensorFarmer?> adminFetchPendingSensorFarmer() async {
+    final res = await _get('/api/v1/admin/users/pending/sensor-bound');
+    if (res.statusCode == 404) return null;
+    return AdminPendingSensorFarmer.fromJson((await _handle(res)) as Map<String, dynamic>);
   }
 
   Future<Map<String, dynamic>> adminApproveFarmer({

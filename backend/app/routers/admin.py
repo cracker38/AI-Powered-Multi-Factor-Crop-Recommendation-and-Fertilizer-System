@@ -52,6 +52,7 @@ from app.ml_service import META_PATH, MODEL_PATH, _load_meta
 from app.schemas import (
     ActivityLogItem,
     AdminApproveFarmerRequest,
+    AdminPendingSensorFarmerResponse,
     AdminPredictionItem,
     AdminSensorFieldDataResponse,
     AdminUserItem,
@@ -64,7 +65,7 @@ from app.schemas import (
     NotificationItem,
     TrainModelResponse,
 )
-from app.rtdb_service import fetch_sensor_field_data
+from app.rtdb_service import fetch_sensor_field_data, find_pending_farmer_with_sensor
 from app.user_profile_utils import user_to_profile
 from app.weather_service import apply_live_climate
 from app.weather_service import weather_insight as build_weather_insight
@@ -175,6 +176,28 @@ def _validate_dataset_df(df: pd.DataFrame) -> pd.DataFrame:
 def list_users_route(_: UserRecord = Depends(require_admin)):
     pred_counts = prediction_counts_by_user()
     return [_user_item(u, pred_counts) for u in list_users()]
+
+
+@router.get("/users/pending/sensor-bound", response_model=AdminPendingSensorFarmerResponse)
+def get_pending_sensor_bound_farmer_route(_: UserRecord = Depends(require_admin)):
+    """Pending farmer linked to live ESP8266 soil sensor readings (for admin approval)."""
+    match = find_pending_farmer_with_sensor(list_users())
+    if match is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending farmer with live sensor data. Ensure the ESP8266 is online and registered to the waiting account.",
+        )
+    user, reading = match
+    return AdminPendingSensorFarmerResponse(
+        user_id=user.uid,
+        email=user.email,
+        display_name=user.display_name,
+        district=user.district,
+        device_id=reading.device_id,
+        source=reading.source,
+        updated_at_ms=reading.updated_at_ms,
+        field_data=reading.field_data,
+    )
 
 
 @router.get("/users/{user_id}", response_model=AdminUserItem)

@@ -57,6 +57,18 @@ class AdminSensorFieldDataResponse(BaseModel):
     updated_at_ms: int | None = None
 
 
+class AdminPendingSensorFarmerResponse(BaseModel):
+    """Pending farmer whose ESP8266 sensor has live readings in RTDB."""
+    user_id: str
+    email: str
+    display_name: str | None = None
+    district: str | None = None
+    device_id: str | None = None
+    source: str = "sensor"
+    updated_at_ms: int | None = None
+    field_data: FarmerFieldData
+
+
 class UpdateFarmerProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=2, max_length=120)
     phone: str | None = Field(default=None, max_length=20)
