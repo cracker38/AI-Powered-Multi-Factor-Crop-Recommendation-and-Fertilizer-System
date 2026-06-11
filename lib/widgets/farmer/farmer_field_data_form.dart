@@ -115,6 +115,23 @@ class FarmerFieldDataFormState extends State<FarmerFieldDataForm> {
     await widget.onSubmit(data);
   }
 
+  /// Apply ESP8266 sensor readings (admin approval or refresh).
+  void applyFieldData(FarmerFieldData data) {
+    setState(() {
+      _n.text = data.nitrogen.toString();
+      _p.text = data.phosphorus.toString();
+      _k.text = data.potassium.toString();
+      _ph.text = data.soilPh.toString();
+      _moisture.text = data.soilMoisture.toString();
+      if (!_climateAuto) {
+        _temp.text = data.temperatureC.toString();
+        _hum.text = data.humidityPct.toString();
+        _rain.text = data.rainfallMm.toString();
+      }
+      _soilType = data.soilType;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Form(

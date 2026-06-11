@@ -49,6 +49,14 @@ class AdminApproveFarmerRequest(BaseModel):
     admin_notes: str | None = Field(default=None, max_length=500)
 
 
+class AdminSensorFieldDataResponse(BaseModel):
+    field_data: FarmerFieldData
+    source: str = "sensor"
+    device_id: str | None = None
+    user_uid: str | None = None
+    updated_at_ms: int | None = None
+
+
 class UpdateFarmerProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, min_length=2, max_length=120)
     phone: str | None = Field(default=None, max_length=20)

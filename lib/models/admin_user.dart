@@ -32,6 +32,7 @@ class AdminUser {
   bool get isAdmin => role == 'admin';
   bool get isFarmer => role == 'farmer';
   bool get isPending => isFarmer && approvalStatus == 'pending';
+  bool get isRejected => isFarmer && approvalStatus == 'rejected';
   bool get isApproved => isAdmin || approvalStatus == 'approved';
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {

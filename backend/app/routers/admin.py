@@ -53,15 +53,18 @@ from app.schemas import (
     ActivityLogItem,
     AdminApproveFarmerRequest,
     AdminPredictionItem,
+    AdminSensorFieldDataResponse,
     AdminUserItem,
     AdminUserUpdate,
     DatasetItem,
     DatasetUpdate,
+    FarmerFieldData,
     ModelReportResponse,
     ModelStatusResponse,
     NotificationItem,
     TrainModelResponse,
 )
+from app.rtdb_service import fetch_sensor_field_data
 from app.user_profile_utils import user_to_profile
 from app.weather_service import apply_live_climate
 from app.weather_service import weather_insight as build_weather_insight
@@ -182,6 +185,27 @@ def get_user_route(user_id: str, _: UserRecord = Depends(require_admin)):
     return _user_item(user)
 
 
+@router.get("/users/{user_id}/sensor-field-data", response_model=AdminSensorFieldDataResponse)
+def get_farmer_sensor_field_data_route(user_id: str, _: UserRecord = Depends(require_admin)):
+    """Latest ESP8266 soil readings from Firebase RTDB for the selected farmer."""
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    reading = fetch_sensor_field_data(user_id, user_email=user.email)
+    if reading is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No sensor data found for this farmer. Ensure the ESP8266 is online and bound to this account.",
+        )
+    return AdminSensorFieldDataResponse(
+        field_data=reading.field_data,
+        source=reading.source,
+        device_id=reading.device_id,
+        user_uid=reading.user_uid or user_id,
+        updated_at_ms=reading.updated_at_ms,
+    )
+
+
 @router.post("/users/{user_id}/approve", response_model=AdminUserItem)
 def approve_farmer_route(
     user_id: str,
@@ -276,6 +300,13 @@ def approve_farmer_route(
         approval_status="approved",
         disabled=False,
     )
+    try:
+        disable_firebase_user(user.uid, False)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Farmer approved in database but sign-in could not be enabled: {exc}",
+        ) from exc
     create_prediction(
         user.uid,
         {
@@ -333,8 +364,11 @@ def reject_farmer_route(user_id: str, admin: UserRecord = Depends(require_admin)
     updated = update_user(user_id, approval_status="rejected", disabled=True)
     try:
         disable_firebase_user(user.uid, True)
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Registration rejected in database but sign-in could not be revoked: {exc}",
+        ) from exc
     _audit(admin, "farmer_rejected", "user", user.email, severity="warning")
     return _user_item(updated)  # type: ignore[arg-type]
 
@@ -357,6 +391,16 @@ def update_user_route(
     if body.display_name is not None:
         updates["display_name"] = body.display_name
     if body.disabled is not None:
+        if body.disabled is False and user.approval_status == "rejected":
+            raise HTTPException(
+                status_code=400,
+                detail="Rejected accounts cannot be enabled. Use Review & approve to re-activate.",
+            )
+        if body.disabled is False and user.approval_status == "pending":
+            raise HTTPException(
+                status_code=400,
+                detail="Pending registrations must be approved before sign-in is enabled.",
+            )
         updates["disabled"] = body.disabled
         try:
             disable_firebase_user(user.uid, body.disabled)
@@ -379,6 +423,13 @@ def update_user_route(
             category="security",
             severity="warning",
         )
+    elif body.disabled is False:
+        create_notification(
+            title="Account enabled",
+            message=f"Farmer {user.email} can sign in again.",
+            category="user",
+            severity="info",
+        )
     return _user_item(user)
 
 
@@ -389,15 +440,24 @@ def delete_user_route(user_id: str, admin: UserRecord = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "admin":
         raise HTTPException(status_code=403, detail="Cannot delete admin account")
+    firebase_errors: list[str] = []
     try:
         disable_firebase_user(user.uid, True)
-    except Exception:
-        pass
+    except Exception as exc:
+        firebase_errors.append(f"disable: {exc}")
     delete_user(user_id)
     try:
         delete_firebase_user(user.uid)
-    except Exception:
-        pass
+    except Exception as exc:
+        firebase_errors.append(f"delete: {exc}")
+    if firebase_errors:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Profile removed for {user.email}, but Firebase Auth cleanup failed "
+                f"({'; '.join(firebase_errors)}). Check backend service account credentials."
+            ),
+        )
     _audit(admin, "user_deleted", "user", user.email, severity="warning")
     create_notification(
         title="Account deleted",

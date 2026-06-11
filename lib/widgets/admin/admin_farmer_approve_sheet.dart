@@ -32,13 +32,23 @@ class _AdminFarmerApproveSheet extends StatefulWidget {
 
 class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
   final _formKey = GlobalKey<FormState>();
+  final _fieldDataKey = GlobalKey<FarmerFieldDataFormState>();
   late final _name = TextEditingController(text: widget.user.displayName ?? '');
   late final _phone = TextEditingController(text: widget.user.phone ?? '');
   late final _farmSize = TextEditingController(text: (widget.user.farmSizeHa ?? 1).toString());
   late final _notes = TextEditingController();
   late String? _district = widget.user.district;
   bool _busy = false;
+  bool _sensorLoading = true;
+  bool _sensorLoaded = false;
   String? _error;
+  String? _sensorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSensorFieldData();
+  }
 
   @override
   void dispose() {
@@ -47,6 +57,44 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
     _farmSize.dispose();
     _notes.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSensorFieldData() async {
+    setState(() {
+      _sensorLoading = true;
+      _sensorMessage = null;
+    });
+    try {
+      final reading = await widget.api.adminFetchSensorFieldData(widget.user.id);
+      if (!mounted) return;
+      if (reading != null) {
+        setState(() {
+          _sensorLoaded = true;
+          _sensorMessage =
+              'Loaded ${reading.summaryLabel} for ${widget.user.email}. Review values before approving.';
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _fieldDataKey.currentState?.applyFieldData(reading.fieldData);
+        });
+      } else {
+        final fallback = widget.user.fieldData;
+        if (fallback != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _fieldDataKey.currentState?.applyFieldData(fallback);
+          });
+        }
+        setState(() {
+          _sensorLoaded = false;
+          _sensorMessage = 'No live sensor data yet. Using saved registration values if available.';
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _sensorMessage = e.message);
+      }
+    } finally {
+      if (mounted) setState(() => _sensorLoading = false);
+    }
   }
 
   Future<void> _onFieldData(FarmerFieldData data) async {
@@ -111,9 +159,52 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Review and complete all registration and field data before activating this account.',
+                'Field data is loaded from the ESP8266 soil sensor when available. Review and edit before activating.',
                 style: TextStyle(height: 1.4, color: AppColors.textSecondary),
               ),
+              if (_sensorLoading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                const Text('Loading sensor data…', style: TextStyle(color: AppColors.textSecondary)),
+              ],
+              if (_sensorMessage != null && !_sensorLoading) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.08) : Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _sensorLoaded ? AppColors.primary.withValues(alpha: 0.3) : Colors.orange.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _sensorLoaded ? Icons.sensors_rounded : Icons.info_outline_rounded,
+                        color: _sensorLoaded ? AppColors.primary : Colors.orange.shade800,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _sensorMessage!,
+                          style: TextStyle(
+                            color: _sensorLoaded ? AppColors.primary : Colors.orange.shade900,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      if (!_sensorLoading)
+                        TextButton(
+                          onPressed: _busy ? null : _loadSensorFieldData,
+                          child: const Text('Refresh'),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               Form(
                 key: _formKey,
@@ -167,6 +258,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
               ),
               const SizedBox(height: 20),
               FarmerFieldDataForm(
+                key: _fieldDataKey,
                 initial: widget.user.fieldData,
                 busy: _busy,
                 api: widget.api,

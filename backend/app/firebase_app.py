@@ -86,7 +86,10 @@ def create_admin_user(email: str, password: str) -> str:
 def disable_firebase_user(uid: str, disabled: bool) -> None:
     ensure_firebase()
     if not _use_admin_sdk:
-        return
+        raise RuntimeError(
+            "Firebase Admin SDK is not configured. Place the service account JSON in backend/ "
+            "and set FIREBASE_CREDENTIALS_PATH in .env."
+        )
     auth.update_user(uid, disabled=disabled)
 
 
@@ -94,7 +97,10 @@ def delete_firebase_user(uid: str) -> None:
     """Remove Firebase Auth account when Admin SDK is available."""
     ensure_firebase()
     if not _use_admin_sdk:
-        return
+        raise RuntimeError(
+            "Firebase Admin SDK is not configured. Place the service account JSON in backend/ "
+            "and set FIREBASE_CREDENTIALS_PATH in .env."
+        )
     try:
         auth.delete_user(uid)
     except auth.UserNotFoundError:

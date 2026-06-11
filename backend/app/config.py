@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Use sqlite when Firestore gRPC hangs (common on Windows). Set firestore for cloud-only deploy.
     storage_backend: str = "sqlite"
     openweather_api_key: str = ""
+    firebase_rtdb_url: str = "https://edissaproject-default-rtdb.firebaseio.com"
+    firebase_rtdb_secret: str = ""
 
     @property
     def openweather_api_key_resolved(self) -> str:
