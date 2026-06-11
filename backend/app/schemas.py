@@ -15,6 +15,33 @@ class FarmerFieldData(BaseModel):
     soil_type: str = Field(default="loam", max_length=40)
 
 
+class SensorFieldDataRaw(BaseModel):
+    """Exact ESP8266 values from RTDB (no range clamping for admin display)."""
+    nitrogen: float = 0
+    phosphorus: float = 0
+    potassium: float = 0
+    soil_moisture: float = 0
+    temperature_c: float = 24
+    humidity_pct: float = 70
+    soil_ph: float = 6.5
+    rainfall_mm: float = 200
+    soil_type: str = "loam"
+    ec_us_cm: float | None = None
+
+    def to_farmer_field_data(self) -> FarmerFieldData:
+        return FarmerFieldData(
+            nitrogen=max(0.0, min(500.0, self.nitrogen)),
+            phosphorus=max(0.0, min(500.0, self.phosphorus)),
+            potassium=max(0.0, min(500.0, self.potassium)),
+            soil_moisture=max(0.0, min(100.0, self.soil_moisture)),
+            temperature_c=max(-10.0, min(55.0, self.temperature_c)),
+            humidity_pct=max(0.0, min(100.0, self.humidity_pct)),
+            soil_ph=max(0.0, min(14.0, self.soil_ph)),
+            rainfall_mm=max(0.0, min(2000.0, self.rainfall_mm)),
+            soil_type=self.soil_type or "loam",
+        )
+
+
 class UserProfile(BaseModel):
     id: str
     email: str
@@ -45,12 +72,12 @@ class AdminApproveFarmerRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     district: str | None = Field(default=None, max_length=80)
     farm_size_ha: float = Field(ge=0.01, le=10000)
-    field_data: FarmerFieldData
+    field_data: SensorFieldDataRaw
     admin_notes: str | None = Field(default=None, max_length=500)
 
 
 class AdminSensorFieldDataResponse(BaseModel):
-    field_data: FarmerFieldData
+    field_data: SensorFieldDataRaw
     source: str = "sensor"
     device_id: str | None = None
     user_uid: str | None = None
@@ -66,7 +93,7 @@ class AdminPendingSensorFarmerResponse(BaseModel):
     device_id: str | None = None
     source: str = "sensor"
     updated_at_ms: int | None = None
-    field_data: FarmerFieldData
+    field_data: SensorFieldDataRaw
 
 
 class UpdateFarmerProfileRequest(BaseModel):

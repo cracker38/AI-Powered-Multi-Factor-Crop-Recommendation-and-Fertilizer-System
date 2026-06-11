@@ -6,8 +6,8 @@ import '../../models/admin_sensor_field_data.dart';
 import '../../models/admin_user.dart';
 import '../../models/farmer_field_data.dart';
 import '../../services/api_service.dart';
-import '../../widgets/farmer/farmer_field_data_form.dart';
 import 'admin_sensor_reading_preview.dart';
+import 'admin_sensor_readonly_panel.dart';
 
 Future<bool?> showAdminFarmerApproveSheet(
   BuildContext context, {
@@ -34,7 +34,6 @@ class _AdminFarmerApproveSheet extends StatefulWidget {
 
 class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _fieldDataKey = GlobalKey<FarmerFieldDataFormState>();
   late final _name = TextEditingController(text: widget.user.displayName ?? '');
   late final _phone = TextEditingController(text: widget.user.phone ?? '');
   late final _farmSize = TextEditingController(text: (widget.user.farmSizeHa ?? 1).toString());
@@ -66,6 +65,8 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
     setState(() {
       _sensorLoading = true;
       _sensorMessage = null;
+      _sensorLoaded = false;
+      _sensorReading = null;
     });
     try {
       final reading = await widget.api.adminFetchSensorFieldData(widget.user.id);
@@ -75,39 +76,33 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
           _sensorLoaded = true;
           _sensorReading = reading;
           _sensorMessage =
-              'This farmer is linked to the live ESP8266 probe. Values below were loaded automatically.';
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _fieldDataKey.currentState?.applyFieldData(reading.fieldData);
+              'Live ESP8266 readings loaded for this pending farmer. Sensor values cannot be edited.';
         });
       } else {
-        final fallback = widget.user.fieldData;
-        if (fallback != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _fieldDataKey.currentState?.applyFieldData(fallback);
-          });
-        }
         setState(() {
-          _sensorLoaded = false;
-          _sensorMessage = 'No live sensor data yet. Using saved registration values if available.';
+          _sensorMessage =
+              'No sensor data available yet. Ensure the ESP8266 is online — readings are linked automatically to the last pending farmer (${widget.user.email}).';
         });
       }
     } on ApiException catch (e) {
-      if (mounted) {
-        setState(() => _sensorMessage = e.message);
-      }
+      if (mounted) setState(() => _sensorMessage = e.message);
     } finally {
       if (mounted) setState(() => _sensorLoading = false);
     }
   }
 
-  Future<void> _onFieldData(FarmerFieldData data) async {
+  Future<void> _activate() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_sensorLoaded || _sensorReading == null) {
+      setState(() => _error = 'Cannot approve without live sensor data from Firebase.');
+      return;
+    }
     final farmSize = double.tryParse(_farmSize.text.replaceAll(',', '.'));
     if (farmSize == null || farmSize <= 0) {
       setState(() => _error = 'Enter a valid farm size in hectares');
       return;
     }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -117,7 +112,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
         id: widget.user.id,
         displayName: _name.text.trim(),
         farmSizeHa: farmSize,
-        fieldData: data,
+        sensorFieldData: _sensorReading!.rawFieldData,
         phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         district: _district,
         adminNotes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
@@ -157,20 +152,17 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                 'Approve farmer with sensor data',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
-              Text(
-                widget.user.email,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
+              Text(widget.user.email, style: const TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 8),
               const Text(
-                'This account is matched to the ESP8266 7-in-1 soil sensor. Field readings are pre-filled from Firebase — review, adjust if needed, then activate.',
+                'The latest ESP8266 reading is assigned to the last pending farmer. Review account details below — soil data comes directly from the sensor and cannot be changed.',
                 style: TextStyle(height: 1.4, color: AppColors.textSecondary),
               ),
               if (_sensorLoading) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 const LinearProgressIndicator(),
                 const SizedBox(height: 8),
-                const Text('Loading sensor data…', style: TextStyle(color: AppColors.textSecondary)),
+                const Text('Loading sensor data from Firebase…', style: TextStyle(color: AppColors.textSecondary)),
               ],
               if (_sensorMessage != null && !_sensorLoading) ...[
                 const SizedBox(height: 12),
@@ -180,7 +172,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                     reading: _sensorReading,
                     farmerEmail: widget.user.email,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                 ],
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -208,16 +200,14 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                           ),
                         ),
                       ),
-                      if (!_sensorLoading)
-                        TextButton(
-                          onPressed: _busy ? null : _loadSensorFieldData,
-                          child: const Text('Refresh'),
-                        ),
+                      TextButton(onPressed: _busy ? null : _loadSensorFieldData, child: const Text('Refresh')),
                     ],
                   ),
                 ),
               ],
               const SizedBox(height: 20),
+              const Text('Account details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              const SizedBox(height: 10),
               Form(
                 key: _formKey,
                 child: Column(
@@ -268,25 +258,38 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                   ],
                 ),
               ),
+              if (_sensorLoaded && _sensorReading != null) ...[
+                const SizedBox(height: 20),
+                const Text('Soil sensor readings (read-only)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 10),
+                AdminSensorReadonlyPanel(
+                  fieldData: _sensorReading!.fieldData,
+                  deviceId: _sensorReading!.deviceId,
+                  ecUsCm: _sensorReading!.ecUsCm,
+                ),
+              ],
               const SizedBox(height: 20),
-              FarmerFieldDataForm(
-                key: _fieldDataKey,
-                initial: widget.user.fieldData,
-                busy: _busy,
-                api: widget.api,
-                district: _district ?? widget.user.district,
-                submitLabel: 'Activate farmer account',
-                onSubmit: _onFieldData,
+              FilledButton.icon(
+                onPressed: (_busy || !_sensorLoaded) ? null : _activate,
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.check_circle_rounded),
+                label: const Text('Activate farmer account'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size.fromHeight(48),
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(_error!, style: const TextStyle(color: AppColors.errorText)),
               ],
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: _busy ? null : () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
+              TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
             ],
           ),
         ),

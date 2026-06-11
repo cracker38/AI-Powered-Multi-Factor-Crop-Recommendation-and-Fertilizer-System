@@ -36,10 +36,9 @@ int phosphorus = 0;
 int potassium = 0;
 
 // ================= FIREBASE RTDB (AgriSmart RW / edissaproject) =================
+// Latest readings go to pending_farmer_sensor/latest — backend links to last pending farmer.
 const char* FIREBASE_DB_URL    = "https://edissaproject-default-rtdb.firebaseio.com";
 const char* FIREBASE_DB_SECRET = "aMIxpPpg3DZQePSJKTiGmZtECDA3";
-const char* FIREBASE_EMAIL     = "bostonelie0@gmail.com";
-const char* FIREBASE_USER_UID  = "3prieLSLC2Ng3cFcyxiXwCefQ042";
 const char* DEVICE_ID          = "ESP8266_SOIL_01";
 
 uint32_t gSequence = 0;
@@ -233,8 +232,6 @@ String buildSensorJson() {
   gSequence++;
   String j = "{";
   j += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
-  j += "\"user_uid\":\"" + String(FIREBASE_USER_UID) + "\",";
-  j += "\"email\":\"" + String(FIREBASE_EMAIL) + "\",";
   j += "\"source\":\"sensor\",";
   j += "\"sequence\":" + String(gSequence) + ",";
   j += "\"soil_moisture\":" + String(moisture) + ",";
@@ -245,28 +242,10 @@ String buildSensorJson() {
   j += "\"nitrogen\":" + String(nitrogen) + ",";
   j += "\"phosphorus\":" + String(phosphorus) + ",";
   j += "\"potassium\":" + String(potassium) + ",";
-  j += "\"online\":true,";
-  j += "\"updated_at_ms\":" + String(millis());
-  j += "}";
-  return j;
-}
-
-String buildApprovalJson() {
-  String j = "{";
-  j += "\"nitrogen\":" + String(nitrogen) + ",";
-  j += "\"phosphorus\":" + String(phosphorus) + ",";
-  j += "\"potassium\":" + String(potassium) + ",";
-  j += "\"soil_moisture\":" + String(moisture) + ",";
-  j += "\"temperature_c\":" + String(temperature, 1) + ",";
   j += "\"humidity_pct\":0,";
-  j += "\"soil_ph\":" + String(ph, 1) + ",";
   j += "\"rainfall_mm\":0,";
   j += "\"soil_type\":\"loam\",";
-  j += "\"ec_us_cm\":" + String(ec) + ",";
-  j += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
-  j += "\"user_uid\":\"" + String(FIREBASE_USER_UID) + "\",";
-  j += "\"email\":\"" + String(FIREBASE_EMAIL) + "\",";
-  j += "\"source\":\"sensor\",";
+  j += "\"online\":true,";
   j += "\"updated_at_ms\":" + String(millis());
   j += "}";
   return j;
@@ -281,27 +260,23 @@ void sendToServer() {
     return;
   }
 
-  String sensorPayload = buildSensorJson();
-  String approvalPayload = buildApprovalJson();
+  String payload = buildSensorJson();
   int code = 0;
 
-  String basePath = String("/soil_sensors/") + FIREBASE_USER_UID + "/" + DEVICE_ID;
-  String latestPath = basePath + "/latest.json";
-  if (!fbRtdbRequest("PUT", latestPath, sensorPayload, code)) {
-    Serial.println("Firebase sensor upload failed");
+  // Primary: latest reading for the last pending farmer (admin approval)
+  if (!fbRtdbRequest("PUT", "/pending_farmer_sensor/latest.json", payload, code)) {
+    Serial.println("Firebase pending_farmer_sensor upload failed");
     return;
   }
+  fbRtdbRequest("POST", "/pending_farmer_sensor/history.json", payload, code);
 
-  String histPath = basePath + "/history.json";
-  fbRtdbRequest("POST", histPath, sensorPayload, code);
-
-  String approvalPath = String("/farmer_approval/") + FIREBASE_USER_UID + "/latest.json";
-  fbRtdbRequest("PUT", approvalPath, approvalPayload, code);
+  // Device archive
+  String devicePath = String("/soil_sensors/") + DEVICE_ID + "/latest.json";
+  fbRtdbRequest("PUT", devicePath, payload, code);
+  fbRtdbRequest("POST", String("/soil_sensors/") + DEVICE_ID + "/history.json", payload, code);
 
   Serial.print("HTTP Response Code: ");
   Serial.println(code);
-  Serial.println("Server Response: Firebase RTDB OK");
-  Serial.println("Paths:");
-  Serial.println("  soil_sensors/" + String(FIREBASE_USER_UID) + "/" + String(DEVICE_ID) + "/latest");
-  Serial.println("  farmer_approval/" + String(FIREBASE_USER_UID) + "/latest");
+  Serial.println("Firebase RTDB OK");
+  Serial.println("Path: pending_farmer_sensor/latest (last pending farmer)");
 }

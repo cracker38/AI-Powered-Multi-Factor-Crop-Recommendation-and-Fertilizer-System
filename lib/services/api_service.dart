@@ -242,7 +242,7 @@ class ApiService {
     required String id,
     required String displayName,
     required double farmSizeHa,
-    required FarmerFieldData fieldData,
+    required Map<String, dynamic> sensorFieldData,
     String? phone,
     String? district,
     String? adminNotes,
@@ -252,7 +252,7 @@ class ApiService {
       body: jsonEncode({
         'display_name': displayName,
         'farm_size_ha': farmSizeHa,
-        'field_data': fieldData.toJson(),
+        'field_data': sensorFieldData,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (district != null && district.isNotEmpty) 'district': district,
         if (adminNotes != null && adminNotes.isNotEmpty) 'admin_notes': adminNotes,

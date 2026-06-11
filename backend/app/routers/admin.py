@@ -214,7 +214,7 @@ def get_farmer_sensor_field_data_route(user_id: str, _: UserRecord = Depends(req
     user = get_user(user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    reading = fetch_sensor_field_data(user_id, user_email=user.email)
+    reading = fetch_sensor_field_data(user_id, user_email=user.email, all_users=list_users())
     if reading is None:
         raise HTTPException(
             status_code=404,
@@ -243,7 +243,7 @@ def approve_farmer_route(
     if user.approval_status == "approved":
         raise HTTPException(status_code=400, detail="Farmer already approved")
 
-    fd = body.field_data
+    fd = body.field_data.to_farmer_field_data()
     temp, hum, rain, _ = apply_live_climate(
         district=body.district or user.district,
         temperature_c=fd.temperature_c,
