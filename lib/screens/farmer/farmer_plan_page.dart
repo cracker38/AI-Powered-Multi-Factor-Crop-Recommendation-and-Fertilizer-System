@@ -83,9 +83,10 @@ class _FarmerPlanPageState extends State<FarmerPlanPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'No admin-generated plan is available yet. Please wait for approval or refresh.',
-                                  style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+                                Text(
+                                  f.error ??
+                                      'No crop plan is available yet. If you were just approved, tap Refresh — your plan is generated automatically from your farm assessment.',
+                                  style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
                                 ),
                                 const SizedBox(height: 12),
                                 OutlinedButton.icon(

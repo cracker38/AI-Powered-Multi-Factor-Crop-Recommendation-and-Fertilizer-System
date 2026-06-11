@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps import require_approved_farmer, require_farmer
 from app.farm_improvement import build_improvement_actions
+from app.farmer_plan_service import build_and_save_farmer_plan
 from app.fertilizer_service import recommend_fertilizers, soil_health_assessment
 from app.firestore_db import (
     UserRecord,
@@ -192,6 +193,17 @@ def evaluate(
 @router.get("/history", response_model=list[PredictionHistoryItem])
 def history(limit: int = 30, user: UserRecord = Depends(require_farmer)):
     rows = list_predictions_for_user(user.uid, limit=min(limit, 100))
+    if not rows and user.is_approved and user.field_data:
+        try:
+            build_and_save_farmer_plan(
+                user.uid,
+                user.field_data,
+                district=user.district,
+                use_live_climate=False,
+            )
+            rows = list_predictions_for_user(user.uid, limit=min(limit, 100))
+        except (ValueError, FileNotFoundError):
+            pass
     items = []
     for r in rows:
         created = r.get("created_at")

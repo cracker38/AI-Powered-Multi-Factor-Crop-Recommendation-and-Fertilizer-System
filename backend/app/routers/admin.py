@@ -8,10 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from app.deps import require_admin
-from app.farm_improvement import build_improvement_actions
-from app.fertilizer_service import recommend_fertilizers, soil_health_assessment
-from app.ml_service import predict_ranked
-from app.rwanda_season import current_rwanda_season, season_label
+from app.farmer_plan_service import build_and_save_farmer_plan
 from app.firestore_timeout import run_firestore
 from app.firebase_app import delete_firebase_user, disable_firebase_user
 from app.firestore_db import (
@@ -22,7 +19,6 @@ from app.firestore_db import (
     count_farmers,
     count_predictions,
     create_dataset,
-    create_prediction,
     create_notification,
     avg_soil_health_score,
     crop_distribution,
@@ -68,7 +64,6 @@ from app.schemas import (
 from app.rtdb_service import fetch_sensor_field_data, find_pending_farmer_with_sensor
 from app.user_profile_utils import user_to_profile
 from app.weather_service import apply_live_climate
-from app.weather_service import weather_insight as build_weather_insight
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -254,64 +249,7 @@ def approve_farmer_route(
         update={"temperature_c": temp, "humidity_pct": hum, "rainfall_mm": rain}
     ).model_dump()
 
-    season = current_rwanda_season()
-    ranked, explanation, ml_info = predict_ranked(
-        nitrogen=field_data["nitrogen"],
-        phosphorus=field_data["phosphorus"],
-        potassium=field_data["potassium"],
-        soil_moisture=field_data["soil_moisture"],
-        temperature_c=field_data["temperature_c"],
-        humidity_pct=field_data["humidity_pct"],
-        soil_ph=field_data["soil_ph"],
-        rainfall_mm=field_data["rainfall_mm"],
-        soil_type=field_data["soil_type"],
-        season=season,
-        district=body.district or user.district,
-    )
-    top_crop = ranked[0][0]
-    soil_health_score, soil_health_label = soil_health_assessment(
-        field_data["nitrogen"],
-        field_data["phosphorus"],
-        field_data["potassium"],
-        field_data["soil_ph"],
-        field_data["soil_moisture"],
-    )
-    fert_raw, nutrient_analysis, fert_notes = recommend_fertilizers(
-        crop=top_crop,
-        nitrogen=field_data["nitrogen"],
-        phosphorus=field_data["phosphorus"],
-        potassium=field_data["potassium"],
-        soil_ph=field_data["soil_ph"],
-        soil_moisture=field_data["soil_moisture"],
-        soil_type=field_data["soil_type"],
-        season=season,
-        district=body.district or user.district,
-    )
-    precision_notes = list(ml_info.get("precision_notes_adss") or [])
-    if ml_info.get("fertilizer_applicable", True):
-        precision_notes.extend(fert_notes)
-    weather_insight = build_weather_insight(
-        season=season,
-        district=body.district or user.district,
-        rainfall_mm=field_data["rainfall_mm"],
-        temperature_c=field_data["temperature_c"],
-        humidity_pct=field_data["humidity_pct"],
-    )
-    improvement_actions = build_improvement_actions(
-        ranked[0][1],
-        top_crop,
-        nitrogen=field_data["nitrogen"],
-        phosphorus=field_data["phosphorus"],
-        potassium=field_data["potassium"],
-        soil_moisture=field_data["soil_moisture"],
-        temperature_c=field_data["temperature_c"],
-        humidity_pct=field_data["humidity_pct"],
-        soil_ph=field_data["soil_ph"],
-        rainfall_mm=field_data["rainfall_mm"],
-        soil_type=field_data["soil_type"],
-        season=season,
-        soil_health_score=soil_health_score,
-    )
+    disable_firebase_user(user.uid, False)
 
     updated = update_user(
         user_id,
@@ -323,43 +261,11 @@ def approve_farmer_route(
         approval_status="approved",
         disabled=False,
     )
-    try:
-        disable_firebase_user(user.uid, False)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Farmer approved in database but sign-in could not be enabled: {exc}",
-        ) from exc
-    create_prediction(
+    build_and_save_farmer_plan(
         user.uid,
-        {
-            "nitrogen": field_data["nitrogen"],
-            "phosphorus": field_data["phosphorus"],
-            "potassium": field_data["potassium"],
-            "soil_moisture": field_data["soil_moisture"],
-            "temperature_c": field_data["temperature_c"],
-            "humidity_pct": field_data["humidity_pct"],
-            "soil_ph": field_data["soil_ph"],
-            "rainfall_mm": field_data["rainfall_mm"],
-            "soil_type": field_data["soil_type"],
-            "season": season,
-            "district": body.district or user.district,
-            "model_version": str(ml_info.get("model_version", "unknown")),
-            "top_crop": top_crop,
-            "top_confidence": ranked[0][1],
-            "explanation": explanation,
-            "full_ranking": [{"crop": n, "confidence": s} for n, s in ranked],
-            "soil_health_score": soil_health_score,
-            "soil_health_label": soil_health_label,
-            "fertilizers": fert_raw,
-            "nutrient_analysis": nutrient_analysis,
-            "weather_insight": weather_insight,
-            "precision_notes": precision_notes,
-            "environment_analysis": list(ml_info.get("environment_analysis") or []),
-            "season_used": season,
-            "season_label": season_label(season),
-            "improvement_actions": improvement_actions,
-        },
+        field_data,
+        district=body.district or user.district,
+        use_live_climate=False,
     )
     create_notification(
         title="Farmer account approved",
@@ -377,6 +283,32 @@ def approve_farmer_route(
     return _user_item(updated)  # type: ignore[arg-type]
 
 
+@router.post("/users/{user_id}/regenerate-plan", response_model=AdminUserItem)
+def regenerate_farmer_plan_route(user_id: str, admin: UserRecord = Depends(require_admin)):
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.role != "farmer":
+        raise HTTPException(status_code=400, detail="Only farmer accounts have crop plans")
+    if user.approval_status != "approved":
+        raise HTTPException(status_code=400, detail="Farmer must be approved before generating a plan")
+    if not user.field_data:
+        raise HTTPException(status_code=400, detail="No field data on file for this farmer")
+    try:
+        build_and_save_farmer_plan(
+            user.uid,
+            user.field_data,
+            district=user.district,
+            use_live_climate=False,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    _audit(admin, "farmer_plan_regenerated", "user", user.email)
+    return _user_item(user)  # type: ignore[arg-type]
+
+
 @router.post("/users/{user_id}/reject", response_model=AdminUserItem)
 def reject_farmer_route(user_id: str, admin: UserRecord = Depends(require_admin)):
     user = get_user(user_id)
@@ -385,13 +317,7 @@ def reject_farmer_route(user_id: str, admin: UserRecord = Depends(require_admin)
     if user.role != "farmer":
         raise HTTPException(status_code=400, detail="Only farmer accounts can be rejected")
     updated = update_user(user_id, approval_status="rejected", disabled=True)
-    try:
-        disable_firebase_user(user.uid, True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Registration rejected in database but sign-in could not be revoked: {exc}",
-        ) from exc
+    disable_firebase_user(user.uid, True)
     _audit(admin, "farmer_rejected", "user", user.email, severity="warning")
     return _user_item(updated)  # type: ignore[arg-type]
 
@@ -425,13 +351,7 @@ def update_user_route(
                 detail="Pending registrations must be approved before sign-in is enabled.",
             )
         updates["disabled"] = body.disabled
-        try:
-            disable_firebase_user(user.uid, body.disabled)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Could not update sign-in access: {exc}",
-            ) from exc
+        disable_firebase_user(user.uid, body.disabled)
     user = update_user(user_id, **updates)
     _audit(
         admin,
@@ -463,24 +383,9 @@ def delete_user_route(user_id: str, admin: UserRecord = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="User not found")
     if user.role == "admin":
         raise HTTPException(status_code=403, detail="Cannot delete admin account")
-    firebase_errors: list[str] = []
-    try:
-        disable_firebase_user(user.uid, True)
-    except Exception as exc:
-        firebase_errors.append(f"disable: {exc}")
+    disable_firebase_user(user.uid, True)
     delete_user(user_id)
-    try:
-        delete_firebase_user(user.uid)
-    except Exception as exc:
-        firebase_errors.append(f"delete: {exc}")
-    if firebase_errors:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                f"Profile removed for {user.email}, but Firebase Auth cleanup failed "
-                f"({'; '.join(firebase_errors)}). Check backend service account credentials."
-            ),
-        )
+    delete_firebase_user(user.uid)
     _audit(admin, "user_deleted", "user", user.email, severity="warning")
     create_notification(
         title="Account deleted",

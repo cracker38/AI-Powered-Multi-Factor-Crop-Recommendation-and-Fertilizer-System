@@ -40,12 +40,16 @@ class ApiService {
     };
   }
 
-  Future<http.Response> _timed(Future<http.Response> request) async {
+  Future<http.Response> _timed(
+    Future<http.Response> request, {
+    Duration? timeoutOverride,
+  }) async {
+    final limit = timeoutOverride ?? timeout;
     try {
-      return await request.timeout(timeout);
+      return await request.timeout(limit);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. The API may be running but is slow — wait and tap Retry, or restart scripts/start-api.ps1.',
+        'Request timed out after ${limit.inSeconds}s. The API may be slow — keep scripts/start-api.ps1 running and try again.',
         statusCode: 503,
       );
     } catch (e) {
@@ -68,8 +72,15 @@ class ApiService {
   Future<http.Response> _get(String path) async =>
       _timed(http.get(_uri(path), headers: await _headers()));
 
-  Future<http.Response> _post(String path, {String? body}) async =>
-      _timed(http.post(_uri(path), headers: await _headers(), body: body));
+  Future<http.Response> _post(
+    String path, {
+    String? body,
+    Duration? timeoutOverride,
+  }) async =>
+      _timed(
+        http.post(_uri(path), headers: await _headers(), body: body),
+        timeoutOverride: timeoutOverride,
+      );
 
   Future<http.Response> _patch(String path, {String? body}) async =>
       _timed(http.patch(_uri(path), headers: await _headers(), body: body));
@@ -257,6 +268,7 @@ class ApiService {
         if (district != null && district.isNotEmpty) 'district': district,
         if (adminNotes != null && adminNotes.isNotEmpty) 'admin_notes': adminNotes,
       }),
+      timeoutOverride: const Duration(seconds: 120),
     );
     return (await _handle(res)) as Map<String, dynamic>;
   }

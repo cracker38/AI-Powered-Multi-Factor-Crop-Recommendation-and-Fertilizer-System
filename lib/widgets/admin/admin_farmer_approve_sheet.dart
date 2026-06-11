@@ -263,6 +263,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                 const Text('Soil sensor readings (read-only)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                 const SizedBox(height: 10),
                 AdminSensorReadonlyPanel(
+                  rawFieldData: _sensorReading!.rawFieldData,
                   fieldData: _sensorReading!.fieldData,
                   deviceId: _sensorReading!.deviceId,
                   ecUsCm: _sensorReading!.ecUsCm,
@@ -278,7 +279,7 @@ class _AdminFarmerApproveSheetState extends State<_AdminFarmerApproveSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.check_circle_rounded),
-                label: const Text('Activate farmer account'),
+                label: Text(_busy ? 'Running ML recommendation…' : 'Activate farmer account'),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   minimumSize: const Size.fromHeight(48),

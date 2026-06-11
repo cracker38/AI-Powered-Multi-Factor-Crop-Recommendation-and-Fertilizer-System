@@ -40,5 +40,15 @@ class Settings(BaseSettings):
     def admin_email_normalized(self) -> str:
         return self.admin_email.strip().lower()
 
+    @property
+    def firebase_credentials_path_resolved(self) -> Path:
+        raw = Path(self.firebase_credentials_path)
+        if raw.is_file():
+            return raw.resolve()
+        backend_path = _BACKEND_DIR / self.firebase_credentials_path.lstrip("./")
+        if backend_path.is_file():
+            return backend_path.resolve()
+        return raw
+
 
 settings = Settings()

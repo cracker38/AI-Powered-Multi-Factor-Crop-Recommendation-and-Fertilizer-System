@@ -8,13 +8,21 @@ class AdminSensorReadonlyPanel extends StatelessWidget {
   const AdminSensorReadonlyPanel({
     super.key,
     required this.fieldData,
+    this.rawFieldData,
     this.deviceId,
     this.ecUsCm,
   });
 
   final FarmerFieldData fieldData;
+  final Map<String, dynamic>? rawFieldData;
   final String? deviceId;
   final double? ecUsCm;
+
+  String _rawNum(String key, double fallback) {
+    final v = rawFieldData?[key];
+    if (v is num) return _fmt(v.toDouble());
+    return _fmt(fallback);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +42,7 @@ class AdminSensorReadonlyPanel extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Sensor readings are read-only. Values are taken directly from Firebase RTDB without modification.',
+                  'Sensor readings are read-only — exact values from Firebase RTDB (raw sensor units).',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.35),
                 ),
               ),
@@ -43,13 +51,17 @@ class AdminSensorReadonlyPanel extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _grid([
-          _item('Nitrogen (N)', '${_fmt(fieldData.nitrogen)} kg/ha', Icons.grass_rounded),
-          _item('Phosphorus (P)', '${_fmt(fieldData.phosphorus)} kg/ha', Icons.water_drop_outlined),
-          _item('Potassium (K)', '${_fmt(fieldData.potassium)} kg/ha', Icons.bolt_outlined),
-          _item('Soil pH', _fmt(fieldData.soilPh), Icons.science_outlined),
-          _item('Soil moisture', '${_fmt(fieldData.soilMoisture)}%', Icons.opacity_outlined),
-          _item('Temperature', '${_fmt(fieldData.temperatureC)} °C', Icons.thermostat_outlined),
-          if (ecUsCm != null) _item('EC', '${_fmt(ecUsCm!)} µS/cm', Icons.electric_bolt_outlined),
+          _item('Nitrogen (N)', '${_rawNum('nitrogen', fieldData.nitrogen)} kg/ha', Icons.grass_rounded),
+          _item('Phosphorus (P)', '${_rawNum('phosphorus', fieldData.phosphorus)} kg/ha', Icons.water_drop_outlined),
+          _item('Potassium (K)', '${_rawNum('potassium', fieldData.potassium)} kg/ha', Icons.bolt_outlined),
+          _item('Soil pH', _rawNum('soil_ph', fieldData.soilPh), Icons.science_outlined),
+          _item('Soil moisture', '${_rawNum('soil_moisture', fieldData.soilMoisture)}%', Icons.opacity_outlined),
+          _item('Temperature', '${_rawNum('temperature_c', fieldData.temperatureC)} °C', Icons.thermostat_outlined),
+          _item(
+            'EC',
+            '${_rawNum('ec_us_cm', ecUsCm ?? 0)} µS/cm',
+            Icons.electric_bolt_outlined,
+          ),
           _item('Soil type', fieldData.soilType, Icons.landscape_outlined),
         ]),
       ],

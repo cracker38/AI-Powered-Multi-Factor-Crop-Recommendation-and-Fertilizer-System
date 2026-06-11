@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -10,25 +11,28 @@ from google.oauth2 import id_token as google_id_token
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 _initialized = False
 _use_admin_sdk = False
 
 
 def _credentials_file_exists() -> bool:
-    p = Path(settings.firebase_credentials_path)
-    return p.is_file()
+    return settings.firebase_credentials_path_resolved.is_file()
 
 
 def ensure_firebase() -> None:
     global _initialized, _use_admin_sdk
     if _initialized:
         return
-    # Helps Firestore Admin SDK connect on some Windows networks (avoids gRPC DNS hangs).
     os.environ.setdefault("GRPC_DNS_RESOLVER", "native")
     if _credentials_file_exists():
-        cred = credentials.Certificate(settings.firebase_credentials_path)
-        firebase_admin.initialize_app(cred)
-        _use_admin_sdk = True
+        try:
+            cred = credentials.Certificate(str(settings.firebase_credentials_path_resolved))
+            firebase_admin.initialize_app(cred)
+            _use_admin_sdk = True
+        except Exception as exc:
+            logger.warning("Firebase Admin SDK not loaded: %s", exc)
     _initialized = True
 
 
@@ -84,27 +88,34 @@ def create_admin_user(email: str, password: str) -> str:
 
 
 def disable_firebase_user(uid: str, disabled: bool) -> None:
+    """Best-effort Firebase Auth update; never blocks SQLite approval flow."""
     ensure_firebase()
     if not _use_admin_sdk:
-        raise RuntimeError(
-            "Firebase Admin SDK is not configured. Place the service account JSON in backend/ "
-            "and set FIREBASE_CREDENTIALS_PATH in .env."
+        return
+    try:
+        auth.update_user(uid, disabled=disabled)
+    except auth.UserNotFoundError:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "Firebase Auth update skipped for %s (disabled=%s): %s",
+            uid,
+            disabled,
+            exc,
         )
-    auth.update_user(uid, disabled=disabled)
 
 
 def delete_firebase_user(uid: str) -> None:
     """Remove Firebase Auth account when Admin SDK is available."""
     ensure_firebase()
     if not _use_admin_sdk:
-        raise RuntimeError(
-            "Firebase Admin SDK is not configured. Place the service account JSON in backend/ "
-            "and set FIREBASE_CREDENTIALS_PATH in .env."
-        )
+        return
     try:
         auth.delete_user(uid)
     except auth.UserNotFoundError:
         pass
+    except Exception as exc:
+        logger.warning("Firebase Auth delete skipped for %s: %s", uid, exc)
 
 
 def get_firestore_client():
